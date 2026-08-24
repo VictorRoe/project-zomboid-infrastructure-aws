@@ -110,217 +110,217 @@
           Check server/admin/update variables. The pzsvrtool config format does not
           tolerate spaces or '=' in the admin password.
       no_log: true
----
-    tasks:
+
+  tasks:
     # ==========================================
     # 1. Base e Infraestructura
     # ==========================================
-      - name: Habilitar arquitectura i386 para SteamCMD
-        ansible.builtin.dpkg_selections:
-          name: i386
-          selection: install
-        when: ansible_architecture == 'x86_64'
+    - name: Habilitar arquitectura i386 para SteamCMD
+      ansible.builtin.dpkg_selections:
+        name: i386
+        selection: install
+      when: ansible_architecture == 'x86_64'
 
-      - name: Instalar paquetes base y dependencias
-        ansible.builtin.apt:
-          name:
-            - libc6:i386
-            - libstdc++6:i386
-            - tar
-            - curl
-            - python3
-            - tmux
-            - ufw
+    - name: Instalar paquetes base y dependencias
+      ansible.builtin.apt:
+        name:
+          - libc6:i386
+          - libstdc++6:i386
+          - tar
+          - curl
+          - python3
+          - tmux
+          - ufw
         state: present
-        update_cache: yes
+        update_cache: true
 
-      - name: Crear usuario dedicado para Project Zomboid
-        ansible.builtin.user:
-          name: "{{ pz_user }}"
-          shell: /bin/bash
-          home: "/home/{{ pz_user }}"
-          create_home: yes
+    - name: Crear usuario dedicado para Project Zomboid
+      ansible.builtin.user:
+        name: "{{ pz_user }}"
+        shell: /bin/bash
+        home: "/home/{{ pz_user }}"
+        create_home: true
 
-      - name: Crear directorio base de SteamCMD
-        ansible.builtin.file:
-          path: "/home/{{ pz_user }}/steamcmd"
-          state: directory
-          owner: "{{ pz_user }}"
-          group: "{{ pz_user }}"
-          mode: '0755'
-
-      - name: Descargar e instalar SteamCMD si no existe
-        ansible.builtin.unarchive:
-          src: "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
-          dest: "/home/{{ pz_user }}/steamcmd"
-          remote_src: yes
-        creates: "/home/{{ pz_user }}/steamcmd/steamcmd.sh"
+    - name: Crear directorio base de SteamCMD
+      ansible.builtin.file:
+        path: "/home/{{ pz_user }}/steamcmd"
+        state: directory
         owner: "{{ pz_user }}"
         group: "{{ pz_user }}"
+        mode: '0755'
 
-      - name: ObtenerUID del usuario {{ pz_user }}
-        ansible.builtin.command: "id -u {{ pz_user }}"
-        register: pz_uid
-        changed_when: false
+    - name: Descargar e instalar SteamCMD si no existe
+      ansible.builtin.unarchive:
+        src: "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
+        dest: "/home/{{ pz_user }}/steamcmd"
+        remote_src: true
+      creates: "/home/{{ pz_user }}/steamcmd/steamcmd.sh"
+      owner: "{{ pz_user }}"
+      group: "{{ pz_user }}"
 
-      - name: Habilitar linger para el usuario
-        ansible.builtin.command: "loginctl enable-linger {{ pz_user }}"
-        args:
-          creates: "/var/lib/systemd/linger/{{ pz_user }}"
+    - name: Obtener UID del usuario {{ pz_user }}
+      ansible.builtin.command: "id -u {{ pz_user }}"
+      register: pz_uid
+      changed_when: false
 
-      - name: Crear directorio de override en systemd
-        ansible.builtin.file:
-          path: "/etc/systemd/system/user@{{ pz_uid.stdout }}.service.d"
-          state: directory
-          mode: '0755'
+    - name: Habilitar linger para el usuario
+      ansible.builtin.command: "loginctl enable-linger {{ pz_user }}"
+      args:
+        creates: "/var/lib/systemd/linger/{{ pz_user }}"
 
-      - name: Configurar tiempo de apagado (graceful shutdown)
-        ansible.builtin.copy:
-          dest: "/etc/systemd/system/user@{{ pz_uid.stdout }}.service.d/override.conf"
-          content: |
-            [Service]
-            TimeoutStopSec=60s
-          mode: '0644'
+    - name: Crear directorio de override en systemd
+      ansible.builtin.file:
+        path: "/etc/systemd/system/user@{{ pz_uid.stdout }}.service.d"
+        state: directory
+        mode: '0755'
 
-      - name: Recargar daemon de systemd y asegurar manager activo
-        ansible.builtin.systemd:
-          daemon_reload: yes
-          name: "user@{{ pz_uid.stdout }}"
-          state: started
+    - name: Configurar tiempo de apagado (graceful shutdown)
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/user@{{ pz_uid.stdout }}.service.d/override.conf"
+        content: |
+          [Service]
+          TimeoutStopSec=60s
+        mode: '0644'
+
+    - name: Recargar daemon de systemd y asegurar manager activo
+      ansible.builtin.systemd:
+        daemon_reload: true
+        name: "user@{{ pz_uid.stdout }}"
+        state: started
 
     # ==========================================
     # 3. Instalación de pzsvrtool y Servidor
     # ==========================================
-      - name: Descargar e instalar paquete pzsvrtool
-        ansible.builtin.get_url:
-          url: "{{ pzsvrtool_download_url }}"
-          dest: "/usr/local/bin/pzsvrtool"
-          mode: '0755'
+    - name: Descargar e instalar paquete pzsvrtool
+      ansible.builtin.get_url:
+        url: "{{ pzsvrtool_download_url }}"
+        dest: "/usr/local/bin/pzsvrtool"
+        mode: '0755'
 
-      - name: Crear directorio de configuración de pzsvrtool
-        ansible.builtin.file:
-          path: "/home/{{ pz_user }}/.config/pzsvrtool"
-          state: directory
-          owner: "{{ pz_user }}"
-          group: "{{ pz_user }}"
-          mode: '0750'
+    - name: Crear directorio de configuración de pzsvrtool
+      ansible.builtin.file:
+        path: "/home/{{ pz_user }}/.config/pzsvrtool"
+        state: directory
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        mode: '0750'
 
-      - name: Configurar pzsvrtool de forma no interactiva
-        ansible.builtin.template:
-          src: pzsvrtool.conf.j2
-          dest: "/home/{{ pz_user }}/.config/pzsvrtool/config"
-          owner: "{{ pz_user }}"
-          group: "{{ pz_user }}"
-          mode: '0600'
+    - name: Configurar pzsvrtool de forma no interactiva
+      ansible.builtin.template:
+        src: pzsvrtool.conf.j2
+        dest: "/home/{{ pz_user }}/.config/pzsvrtool/config"
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        mode: '0600'
 
-      - name: Instalar servidor dedicado con pzsvrtool
-        ansible.builtin.command: "pzsvrtool install"
-        become_user: "{{ pz_user }}"
-        args:
-          creates: "/home/{{ pz_user }}/Zomboid/Server"
+    - name: Instalar servidor dedicado con pzsvrtool
+      ansible.builtin.command: "pzsvrtool install"
+      become_user: "{{ pz_user }}"
+      args:
+        creates: "/home/{{ pz_user }}/Zomboid/Server"
 
-      - name: Crear directores de servicios de usuario systemd
-        ansible.builtin.file:
-          path: "/home/{{ pz_user }}/.config/systemd/user/pzsvrtool.service.d"
-          state: directory
-          owner: "{{ pz_user }}"
-          group: "{{ pz_user }}"
-          mode: '0755'
+    - name: Crear directorios de servicios de usuario systemd
+      ansible.builtin.file:
+        path: "/home/{{ pz_user }}/.config/systemd/user/pzsvrtool.service.d"
+        state: directory
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        mode: '0755'
 
-      - name: Mantener servicio pzsvrtool activo tras tmux
-        ansible.builtin.copy:
-          dest: "/home/{{ pz_user }}/.config/systemd/user/pzsvrtool.service.d/override.conf"
-          content: |
-            [Service]
-            RemainAfterExit=yes
-          owner: "{{ pz_user }}"
-          group: "{{ pz_user }}"
-          mode: '0644'
+    - name: Mantener servicio pzsvrtool activo tras tmux
+      ansible.builtin.copy:
+        dest: "/home/{{ pz_user }}/.config/systemd/user/pzsvrtool.service.d/override.conf"
+        content: |
+          [Service]
+          RemainAfterExit=yes
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        mode: '0644'
 
-      - name: Habilitar e iniciar servicio de Project Zomboid
-        ansible.builtin.systemd:
-          name: pzsvrtool
-          scope: user
-          enabled: yes
-          state: started
-        become_user: "{{ pz_user }}"
-        environment:
-          XDG_RUNTIME_DIR: "/run/user/{{ pz_uid.stdout }}"
+    - name: Habilitar e iniciar servicio de Project Zomboid
+      ansible.builtin.systemd:
+        name: pzsvrtool
+        scope: user
+        enabled: true
+        state: started
+      become_user: "{{ pz_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ pz_uid.stdout }}"
 
-      - name: Verificar que el proceso esté en ejecución
-        ansible.builtin.command: "pgrep -u {{ pz_user }} -f ProjectZomboid32"
-        register: pz_process
-        changed_when: false
-        retries: 3
-        delay: 5
+    - name: Verificar que el proceso esté en ejecución
+      ansible.builtin.command: "pgrep -u {{ pz_user }} -f ProjectZomboid32"
+      register: pz_process
+      changed_when: false
+      retries: 3
+      delay: 5
 
     # ==========================================
     # 5. Sistema de Actualización Automática
     # ==========================================
-      - name: Instalar script de actualización automática
-        ansible.builtin.template:
-          src: pz_auto_update.sh.j2
-          dest: "/home/{{ pz_user }}/bin/pz_auto_update.sh"
-          owner: "{{ pz_user }}"
-          group: "{{ pz_user }}"
-          mode: '0755'
+    - name: Instalar script de actualización automática
+      ansible.builtin.template:
+        src: pz_auto_update.sh.j2
+        dest: "/home/{{ pz_user }}/bin/pz_auto_update.sh"
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        mode: '0755'
 
-      - name: Configurar service y timer de actualización en systemd
-        ansible.builtin.template:
-          src: "{{ item.src }}"
-          dest: "/home/{{ pz_user }}/.config/systemd/user/{{ item.dest }}"
-          owner: "{{ pz_user }}"
-          group: "{{ pz_user }}"
-          mode: '0644'
-        loop:
-          - { src: 'pz_update.service.j2', dest: 'pz_update.service' }
-          - { src: 'pz_update.timer.j2', dest: 'pz_update.timer' }
+    - name: Configurar service y timer de actualización en systemd
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "/home/{{ pz_user }}/.config/systemd/user/{{ item.dest }}"
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        mode: '0644'
+      loop:
+        - { src: 'pz_update.service.j2', dest: 'pz_update.service' }
+        - { src: 'pz_update.timer.j2', dest: 'pz_update.timer' }
 
-      - name: Gestionar el timer de actualización automática
-        ansible.builtin.systemd:
-          name: pz_update.timer
-          scope: user
-          enabled: "{{ pz_auto_update_enabled }}"
-          state: "{{ 'started' if pz_auto_update_enabled else 'stopped' }}"
-        become_user: "{{ pz_user }}"
-        environment:
-          XDG_RUNTIME_DIR: "/run/user/{{ pz_uid.stdout }}"
+    - name: Gestionar el timer de actualización automática
+      ansible.builtin.systemd:
+        name: pz_update.timer
+        scope: user
+        enabled: "{{ pz_auto_update_enabled }}"
+        state: "{{ 'started' if pz_auto_update_enabled else 'stopped' }}"
+      become_user: "{{ pz_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ pz_uid.stdout }}"
 
     # ==========================================
     # 6. Red y Firewall (UFW)
     # ==========================================
-      - name: Configurar reglas de Firewall (UFW)
-        community.general.ufw:
-          rule: allow
-          port: "{{ item.port }}"
-          proto: "{{ item.proto }}"
-        loop:
-          - { port: '22', proto: 'tcp' }
-          - { port: '16261', proto: 'udp' }
-          - { port: '16262', proto: 'udp' }
+    - name: Configurar reglas de Firewall (UFW)
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+      loop:
+        - { port: '22', proto: 'tcp' }
+        - { port: '16261', proto: 'udp' }
+        - { port: '16262', proto: 'udp' }
 
-      - name: Activar UFW
-        community.general.ufw:
-          state: enabled
+    - name: Activar UFW
+      community.general.ufw:
+        state: enabled
 
     # ==========================================
     # 7. Verificación y Salida
     # ==========================================
-      - name: Verificar estado de linger y servicio
-        ansible.builtin.stat:
-          path: "/var/lib/systemd/linger/{{ pz_user }}"
-        register: linger_check
+    - name: Verificar estado de linger y servicio
+      ansible.builtin.stat:
+        path: "/var/lib/systemd/linger/{{ pz_user }}"
+      register: linger_check
 
-      - name: Mostrar resumen del despliegue
-        ansible.builtin.debug:
-          msg:
-            - "Despliegue de Project Zomboid completado con éxito."
-            - "Usuario: {{ pz_user }}"
-            - "Linger activo: {{ linger_check.stat.exists }}"
-            - "Actualización automática: {{ pz_auto_update_enabled }}"
-            - "Update logs: sudo -iu {{ pz_user }} journalctl --user -u pz-auto-update.service"
+    - name: Mostrar resumen del despliegue
+      ansible.builtin.debug:
+        msg:
+          - "Despliegue de Project Zomboid completado con éxito."
+          - "Usuario: {{ pz_user }}"
+          - "Linger activo: {{ linger_check.stat.exists }}"
+          - "Actualización automática: {{ pz_auto_update_enabled }}"
+          - "Update logs: sudo -iu {{ pz_user }} journalctl --user -u pz-auto-update.service"
 
-    handlers:
-      - name: Reload system systemd
-        ansible.builtin.systemd_service:
-          daemon_reload: true
+  handlers:
+    - name: Reload system systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
