@@ -110,602 +110,217 @@
           Check server/admin/update variables. The pzsvrtool config format does not
           tolerate spaces or '=' in the admin password.
       no_log: true
+---
+    tasks:
+    # ==========================================
+    # 1. Base e Infraestructura
+    # ==========================================
+      - name: Habilitar arquitectura i386 para SteamCMD
+        ansible.builtin.dpkg_selections:
+          name: i386
+          selection: install
+        when: ansible_architecture == 'x86_64'
 
-  tasks:
-    - name: Enable i386 architecture for SteamCMD
-      ansible.builtin.shell: |
-        dpkg --add-architecture i386
-        apt-get update -y
-      register: pz_dpkg_i386
-      changed_when: pz_dpkg_i386.rc == 0
-
-    - name: Install base packages and pzsvrtool runtime dependencies
-      ansible.builtin.apt:
-        name:
-          - bash
-          - procps
-          - findutils
-          - coreutils
-          - gawk
-          - util-linux
-          - tar
-          - wget
-          - curl
-          - jq
-          - lz4
-          - python3
-          - python3-psutil
-          - python3-bcrypt
-          - python3-aiohttp
-          - sqlite3
-          - tmux
-          - lib32gcc-s1
-          - libc6:i386
-          - libstdc++6:i386
-          - lib32stdc++6
-          - ca-certificates
-          - dbus-user-session
-          - ufw
+      - name: Instalar paquetes base y dependencias
+        ansible.builtin.apt:
+          name:
+            - libc6:i386
+            - libstdc++6:i386
+            - tar
+            - curl
+            - python3
+            - tmux
+            - ufw
         state: present
-        update_cache: true
-        cache_valid_time: 3600
+        update_cache: yes
 
-    - name: Create dedicated Project Zomboid account
-      ansible.builtin.user:
-        name: "{{ pz_user }}"
-        home: "{{ pz_home }}"
-        shell: /bin/bash
-        create_home: true
+      - name: Crear usuario dedicado para Project Zomboid
+        ansible.builtin.user:
+          name: "{{ pz_user }}"
+          shell: /bin/bash
+          home: "/home/{{ pz_user }}"
+          create_home: yes
 
-    - name: Ensure Steam directory exists for pzserver
-      ansible.builtin.file:
-        path: "{{ pz_home }}/Steam"
-        state: directory
+      - name: Crear directorio base de SteamCMD
+        ansible.builtin.file:
+          path: "/home/{{ pz_user }}/steamcmd"
+          state: directory
+          owner: "{{ pz_user }}"
+          group: "{{ pz_user }}"
+          mode: '0755'
+
+      - name: Descargar e instalar SteamCMD si no existe
+        ansible.builtin.unarchive:
+          src: "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
+          dest: "/home/{{ pz_user }}/steamcmd"
+          remote_src: yes
+        creates: "/home/{{ pz_user }}/steamcmd/steamcmd.sh"
         owner: "{{ pz_user }}"
         group: "{{ pz_user }}"
-        mode: "0755"
 
-    - name: Download SteamCMD directly if missing
-      ansible.builtin.unarchive:
-        src: https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz
-        dest: "{{ pz_home }}/Steam"
-        remote_src: true
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        creates: "{{ pz_home }}/Steam/steamcmd.sh"
-
-    - name: Read pzserver UID
-      ansible.builtin.command:
-        cmd: "id -u {{ pz_user }}"
-      register: pz_uid_cmd
-      changed_when: false
-
-    - name: Set pzserver UID fact
-      ansible.builtin.set_fact:
-        pz_uid: "{{ pz_uid_cmd.stdout | trim }}"
-
-    - name: Enable linger for Project Zomboid account
-      ansible.builtin.command:
-        cmd: "loginctl enable-linger {{ pz_user }}"
-        creates: "/var/lib/systemd/linger/{{ pz_user }}"
-
-    - name: Create systemd user service override directory
-      ansible.builtin.file:
-        path: "/etc/systemd/system/user@{{ pz_uid }}.service.d"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Allow enough time for graceful PZ shutdown during host shutdown
-      ansible.builtin.copy:
-        dest: "/etc/systemd/system/user@{{ pz_uid }}.service.d/pzsvrtool.conf"
-        owner: root
-        group: root
-        mode: "0644"
-        content: |
-          [Service]
-          TimeoutStopSec=20m
-      notify: Reload system systemd
-
-    - name: Apply systemd unit changes now
-      ansible.builtin.meta: flush_handlers
-
-    - name: Ensure pzserver user manager is running
-      ansible.builtin.systemd_service:
-        name: "user@{{ pz_uid }}.service"
-        state: started
-
-    - name: Download pinned pzsvrtool package
-      ansible.builtin.get_url:
-        url: "{{ pzsvrtool_deb_url }}"
-        dest: "{{ pzsvrtool_deb_path }}"
-        mode: "0644"
-        force: false
-
-    - name: Install pzsvrtool package
-      ansible.builtin.apt:
-        deb: "{{ pzsvrtool_deb_path }}"
-        state: present
-
-    - name: Create pzsvrtool configuration directory
-      ansible.builtin.file:
-        path: "{{ pz_home }}/pzsvrtool"
-        state: directory
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0700"
-
-    - name: Configure pzsvrtool non-interactively
-      ansible.builtin.copy:
-        dest: "{{ pz_home }}/pzsvrtool/pzsvrtool.config"
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0600"
-        content: |
-          zomboidServerName={{ pz_server_name }}
-          countdownTime={{ pz_shutdown_countdown_minutes }}
-          backup={{ pz_backup_enabled | ternary('true', 'false') }}
-          backupLimit={{ pz_backup_limit }}
-          discord_webhook_notice={{ pz_discord_webhook }}
-          pzRootAdmin={{ pz_admin_name }}
-          pzRootAdminPassword={{ pz_admin_password }}
-      no_log: true
-
-    - name: Install Project Zomboid dedicated server with pzsvrtool via runuser
-      ansible.builtin.shell: |
-        set -o pipefail
-        if [ ! -f {{ (pz_home + '/pzserver/start-server.sh') | quote }} ]; then
-          printf '%s\n' {{ pz_branch | quote }} | runuser -u {{ pz_user }} -- env \
-            HOME={{ pz_home | quote }} \
-            USER={{ pz_user | quote }} \
-            LOGNAME={{ pz_user | quote }} \
-            /usr/bin/pzsvrtool install --json --startserver --lib
-        fi
-      args:
-        executable: /bin/bash
-      register: pz_initial_install_runuser
-      changed_when: "'Installation Completed' in pz_initial_install_runuser.stdout"
-
-    - name: Install Project Zomboid directly if pzsvrtool did not create start script
-      ansible.builtin.shell: |
-        set -o pipefail
-        if [ ! -f {{ (pz_home + '/pzserver/start-server.sh') | quote }} ]; then
-          runuser -u {{ pz_user }} -- env \
-            HOME={{ pz_home | quote }} \
-            USER={{ pz_user | quote }} \
-            LOGNAME={{ pz_user | quote }} \
-            {{ (pz_home + '/Steam/steamcmd.sh') | quote }} \
-            +force_install_dir {{ (pz_home + '/pzserver') | quote }} \
-            +login anonymous \
-            +app_update 380870 validate \
-            +quit
-        fi
-      args:
-        executable: /bin/bash
-      register: pz_direct_steamcmd_install
-      changed_when: "'Success! App' in pz_direct_steamcmd_install.stdout"
-
-    - name: Create user systemd configuration directory
-      ansible.builtin.file:
-        path: "{{ pz_home }}/.config/systemd/user"
-        state: directory
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0755"
-
-    - name: Create pzsvrtool service override directory
-      ansible.builtin.file:
-        path: "{{ pz_home }}/.config/systemd/user/pzsvrtool@{{ pz_server_name }}.service.d"
-        state: directory
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0755"
-
-    - name: Keep pzsvrtool service active after tmux start exits
-      ansible.builtin.copy:
-        dest: "{{ pz_home }}/.config/systemd/user/pzsvrtool@{{ pz_server_name }}.service.d/keepalive.conf"
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0644"
-        content: |
-          [Service]
-          RemainAfterExit=yes
-
-    - name: Enable Project Zomboid user service at boot
-      ansible.builtin.shell: |
-        set -e
-        runuser -u {{ pz_user }} -- env \
-          HOME={{ pz_home | quote }} \
-          XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} \
-          DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ pz_uid }}/bus \
-          systemctl --user daemon-reload
-        runuser -u {{ pz_user }} -- env \
-          HOME={{ pz_home | quote }} \
-          XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} \
-          DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ pz_uid }}/bus \
-          systemctl --user enable pzsvrtool@{{ pz_server_name }}.service
-      args:
-        executable: /bin/bash
-      register: pz_enable_service
-      changed_when: >-
-        'Created symlink' in (pz_enable_service.stdout + pz_enable_service.stderr)
-
-    - name: Start Project Zomboid service if not already active
-      ansible.builtin.shell: |
-        set -e
-        export HOME={{ pz_home | quote }}
-        export XDG_RUNTIME_DIR=/run/user/{{ pz_uid }}
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ pz_uid }}/bus
-        if ! runuser -u {{ pz_user }} -- env \
-          HOME="$HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
-          systemctl --user is-active --quiet pzsvrtool@{{ pz_server_name }}.service; then
-          runuser -u {{ pz_user }} -- env \
-            HOME="$HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
-            /usr/bin/pzsvrtool start
-          echo started
-        fi
-      args:
-        executable: /bin/bash
-      register: pz_start_service
-      changed_when: "'started' in pz_start_service.stdout"
-
-    - name: Wait for Project Zomboid process to start
-      ansible.builtin.shell: "pgrep -u {{ pz_user }} -f ProjectZomboid >/dev/null"
-      args:
-        executable: /bin/bash
-      register: pz_process_check
-      changed_when: false
-      retries: 60
-      delay: 10
-      until: pz_process_check.rc == 0
-
-    # -----------------------------------------------------------------------
-    # Automatic game update implementation
-    # -----------------------------------------------------------------------
-    - name: Install automatic Project Zomboid update script
-      ansible.builtin.copy:
-        dest: "{{ pz_home }}/pzsvrtool/pz-auto-update.sh"
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0750"
-        content: |
-          #!/usr/bin/env bash
-          set -Eeuo pipefail
-
-          PZ_SERVER_NAME={{ pz_server_name | quote }}
-          PZ_BRANCH_INPUT={{ pz_branch | quote }}
-          PZ_REMOTE_BRANCH={{ ('public' if (pz_branch | length == 0) else pz_branch) | quote }}
-          UPDATE_WINDOW_START={{ pz_update_window_start | quote }}
-          UPDATE_WINDOW_END={{ pz_update_window_end | quote }}
-          UPDATE_TIMEZONE={{ pz_update_timezone | quote }}
-          COUNTDOWN_MINUTES={{ pz_update_countdown_minutes | int }}
-          SHUTDOWN_TIMEOUT_MINUTES={{ pz_update_shutdown_timeout_minutes | int }}
-
-          STEAMCMD="$HOME/Steam/steamcmd.sh"
-          MANIFEST="$HOME/pzserver/steamapps/appmanifest_380870.acf"
-          LOCKFILE="$HOME/pzsvrtool/.auto-update.lock"
-          SERVICE="pzsvrtool@${PZ_SERVER_NAME}.service"
-
-          log() {
-            printf '[pz-auto-update] %s\n' "$*"
-            logger -t pz-auto-update -- "$*" || true
-          }
-
-          # Only one updater may execute at a time.
-          exec 9>"$LOCKFILE"
-          if ! flock -n 9; then
-            log "Another update check is already running; skipping."
-            exit 0
-          fi
-
-          # Return success only if the current HHMM is inside the maintenance
-          # window. Crossing-midnight windows such as 23:00-02:00 are supported.
-          in_update_window() {
-            local now start end
-            now="$(TZ="$UPDATE_TIMEZONE" date +%H%M)"
-            start="${UPDATE_WINDOW_START/:/}"
-            end="${UPDATE_WINDOW_END/:/}"
-
-            if (( 10#$start < 10#$end )); then
-              (( 10#$now >= 10#$start && 10#$now < 10#$end ))
-            elif (( 10#$start > 10#$end )); then
-              (( 10#$now >= 10#$start || 10#$now < 10#$end ))
-            else
-              # Equal values mean a 24-hour window.
-              return 0
-            fi
-          }
-
-          if ! in_update_window; then
-            exit 0
-          fi
-
-          if [[ ! -x "$STEAMCMD" || ! -f "$MANIFEST" ]]; then
-            log "SteamCMD or app manifest not found; server may not be initialized yet."
-            exit 0
-          fi
-
-          installed_build="$({ gawk -F'"' '/"buildid"/ { print $4; exit }' "$MANIFEST"; } || true)"
-          if [[ -z "$installed_build" ]]; then
-            log "Could not read installed Steam buildid; skipping."
-            exit 0
-          fi
-
-          app_info="$(mktemp)"
-          trap 'rm -f "$app_info"' EXIT
-
-          if ! timeout 180 bash "$STEAMCMD" \
-              +login anonymous \
-              +app_info_update 1 \
-              +app_info_print 380870 \
-              +quit >"$app_info" 2>&1; then
-            log "SteamCMD update check failed; leaving the running server untouched."
-            exit 0
-          fi
-
-          remote_build="$(
-            gawk -v branch="$PZ_REMOTE_BRANCH" '
-              /^[[:space:]]*"branches"[[:space:]]*$/ { in_branches=1; next }
-              in_branches && $0 ~ "^[[:space:]]*\\\"" branch "\\\"[[:space:]]*$" { in_branch=1; next }
-              in_branch && /^[[:space:]]*"buildid"[[:space:]]*/ {
-                if (match($0, /"buildid"[[:space:]]*"([0-9]+)"/, m)) {
-                  print m[1]
-                  exit
-                }
-              }
-            ' "$app_info"
-          )"
-
-          if [[ -z "$remote_build" ]]; then
-            log "Could not determine remote buildid for Steam branch '$PZ_REMOTE_BRANCH'; skipping."
-            exit 0
-          fi
-
-          if [[ "$installed_build" == "$remote_build" ]]; then
-            log "Already current: build $installed_build."
-            exit 0
-          fi
-
-          log "Update detected: installed=$installed_build remote=$remote_build branch=$PZ_REMOTE_BRANCH."
-
-          if tmux -L pzsvrtool has-session -t "pzsvrtool_$(id -u)_shutdown" 2>/dev/null; then
-            log "A pzsvrtool restart/shutdown countdown is already active; deferring update."
-            exit 0
-          fi
-
-          # Avoid touching files while the systemd unit is in its boot phase but
-          # ProjectZomboid has not appeared in the process table yet.
-          if systemctl --user is-active --quiet "$SERVICE" && \
-             ! pgrep -u "$(id -u)" -f ProjectZomboid >/dev/null; then
-            log "Server service is active but ProjectZomboid is still booting; deferring update."
-            exit 0
-          fi
-
-          server_was_running=0
-          if pgrep -u "$(id -u)" -f ProjectZomboid >/dev/null; then
-            server_was_running=1
-          fi
-
-          # If anything after shutdown fails, make a best-effort attempt to put
-          # the previously-running server back online.
-          restart_on_failure=0
-          recovery() {
-            rc=$?
-            if (( rc != 0 && restart_on_failure == 1 )); then
-              log "Update failed (rc=$rc); attempting to restore service availability."
-              /usr/bin/pzsvrtool start || true
-            fi
-            exit "$rc"
-          }
-          trap recovery ERR
-
-          if (( server_was_running == 1 )); then
-            /usr/bin/pzsvrtool message \
-              "Server update detected. Maintenance starts in ${COUNTDOWN_MINUTES} minute(s)." || true
-            /usr/bin/pzsvrtool quit --time "$COUNTDOWN_MINUTES"
-            restart_on_failure=1
-
-            deadline=$(( $(date +%s) + SHUTDOWN_TIMEOUT_MINUTES * 60 ))
-            while pgrep -u "$(id -u)" -f ProjectZomboid >/dev/null; do
-              if (( $(date +%s) >= deadline )); then
-                log "Graceful shutdown exceeded ${SHUTDOWN_TIMEOUT_MINUTES} minutes; aborting update."
-                exit 1
-              fi
-              sleep 5
-            done
-
-            # Let the pzsvrtool wrapper finish its own post-shutdown backup.
-            for _ in $(seq 1 60); do
-              if ! systemctl --user is-active --quiet "$SERVICE"; then
-                break
-              fi
-              sleep 2
-            done
-
-            if systemctl --user is-active --quiet "$SERVICE"; then
-              log "pzsvrtool service is still active after shutdown; aborting update."
-              exit 1
-            fi
-            if tmux -L pzsvrtool has-session -t "pzsvrtool_${PZ_SERVER_NAME}" 2>/dev/null; then
-              log "pzsvrtool tmux session is still present after shutdown; aborting update."
-              exit 1
-            fi
-          fi
-
-          # Final safety check before touching the installation tree.
-          if pgrep -u "$(id -u)" -f ProjectZomboid >/dev/null; then
-            log "ProjectZomboid is still running; aborting update."
-            exit 1
-          fi
-          if tmux -L pzsvrtool has-session -t "pzsvrtool_${PZ_SERVER_NAME}" 2>/dev/null; then
-            log "Project Zomboid tmux session is still present; aborting update."
-            exit 1
-          fi
-
-          # Guarantee there is a backup immediately before touching game files.
-          /usr/bin/pzsvrtool backupnow || true
-
-          log "Installing Project Zomboid build $remote_build."
-          printf '%s\n' "$PZ_BRANCH_INPUT" | \
-            /usr/bin/pzsvrtool install --json --startserver --lib
-
-          new_build="$({ gawk -F'"' '/"buildid"/ { print $4; exit }' "$MANIFEST"; } || true)"
-          if [[ -z "$new_build" || "$new_build" != "$remote_build" ]]; then
-            log "Update verification failed: expected build $remote_build, found ${new_build:-unknown}."
-            exit 1
-          fi
-          log "Steam update completed; installed build is now $new_build."
-
-          if (( server_was_running == 1 )); then
-            /usr/bin/pzsvrtool start
-            restart_on_failure=0
-            log "Project Zomboid start command issued after update."
-          fi
-
-          exit 0
-      when: pz_auto_update_enabled | bool
-
-    - name: Install automatic update user service
-      ansible.builtin.copy:
-        dest: "{{ pz_home }}/.config/systemd/user/pz-auto-update.service"
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=Project Zomboid automatic Steam update check
-          Wants=network-online.target
-          After=network-online.target
-
-          [Service]
-          Type=oneshot
-          Environment=HOME={{ pz_home }}
-          ExecStart={{ pz_home }}/pzsvrtool/pz-auto-update.sh
-          TimeoutStartSec=45m
-      when: pz_auto_update_enabled | bool
-
-    - name: Install automatic update user timer
-      ansible.builtin.copy:
-        dest: "{{ pz_home }}/.config/systemd/user/pz-auto-update.timer"
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=Periodically check for Project Zomboid Steam updates
-
-          [Timer]
-          OnBootSec=10m
-          OnUnitActiveSec={{ pz_update_check_minutes }}m
-          AccuracySec=1m
-          Persistent=true
-
-          [Install]
-          WantedBy=timers.target
-      when: pz_auto_update_enabled | bool
-
-    - name: Enable automatic update timer
-      ansible.builtin.shell: |
-        set -e
-        runuser -u {{ pz_user }} -- env \
-          HOME={{ pz_home | quote }} \
-          XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} \
-          DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ pz_uid }}/bus \
-          systemctl --user daemon-reload
-        runuser -u {{ pz_user }} -- env \
-          HOME={{ pz_home | quote }} \
-          XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} \
-          DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ pz_uid }}/bus \
-          systemctl --user enable --now pz-auto-update.timer
-      args:
-        executable: /bin/bash
-      register: pz_enable_update_timer
-      changed_when: >-
-        'Created symlink' in (pz_enable_update_timer.stdout + pz_enable_update_timer.stderr)
-      when: pz_auto_update_enabled | bool
-
-    - name: Disable automatic update timer when requested
-      ansible.builtin.shell: |
-        runuser -u {{ pz_user }} -- env \
-          HOME={{ pz_home | quote }} \
-          XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} \
-          DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ pz_uid }}/bus \
-          systemctl --user disable --now pz-auto-update.timer || true
-      args:
-        executable: /bin/bash
-      changed_when: false
-      when: not (pz_auto_update_enabled | bool)
-
-    # -----------------------------------------------------------------------
-    # Firewall last: allow SSH before enabling UFW.
-    # -----------------------------------------------------------------------
-    - name: Allow SSH through UFW
-      ansible.builtin.command:
-        cmd: "ufw allow {{ pz_ssh_port }}/tcp"
-      register: pz_ufw_ssh
-      changed_when: "'Rule added' in pz_ufw_ssh.stdout"
-      when: pz_manage_ufw | bool
-
-    - name: Allow Project Zomboid UDP ports through UFW
-      ansible.builtin.command:
-        cmd: "ufw allow {{ item }}/udp"
-      loop: "{{ pz_udp_ports }}"
-      register: pz_ufw_pz
-      changed_when: "'Rule added' in pz_ufw_pz.stdout"
-      when: pz_manage_ufw | bool
-
-    - name: Check UFW status
-      ansible.builtin.command:
-        cmd: ufw status
-      register: pz_ufw_status
-      changed_when: false
-      when: pz_manage_ufw | bool
-
-    - name: Enable UFW
-      ansible.builtin.command:
-        cmd: ufw --force enable
-      register: pz_ufw_enable
-      changed_when: true
-      when:
-        - pz_manage_ufw | bool
-        - "'Status: inactive' in pz_ufw_status.stdout"
-
-    - name: Verify Project Zomboid service is enabled
-      ansible.builtin.shell: |
-        runuser -u {{ pz_user }} -- env \
-          HOME={{ pz_home | quote }} \
-          XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} \
-          DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ pz_uid }}/bus \
-          systemctl --user is-enabled pzsvrtool@{{ pz_server_name }}.service
-      args:
-        executable: /bin/bash
-      register: pz_service_enabled
-      changed_when: false
-      failed_when: pz_service_enabled.stdout | trim != 'enabled'
-
-    - name: Verify linger is enabled
-      ansible.builtin.command:
-        cmd: "loginctl show-user {{ pz_user }} -p Linger --value"
-      register: pz_linger
-      changed_when: false
-      failed_when: pz_linger.stdout | trim != 'yes'
-
-    - name: Show final service information
-      ansible.builtin.debug:
-        msg:
-          - "Project Zomboid is installed and started as {{ pz_user }}."
-          - "Boot service: pzsvrtool@{{ pz_server_name }}.service (systemd --user + linger)."
-          - >-
-            Automatic PZ updates: {{ 'enabled' if pz_auto_update_enabled else 'disabled' }};
-            window {{ pz_update_window_start }}-{{ pz_update_window_end }}
-            ({{ pz_update_timezone }}), checked every {{ pz_update_check_minutes }} minutes.
-          - "Console: sudo -iu {{ pz_user }} pzsvrtool console"
-          - "Service status: sudo -iu {{ pz_user }} systemctl --user status pzsvrtool@{{ pz_server_name }}.service"
-          - "Update timer: sudo -iu {{ pz_user }} systemctl --user list-timers pz-auto-update.timer"
-          - "Update logs: sudo -iu {{ pz_user }} journalctl --user -u pz-auto-update.service"
-
-  handlers:
-    - name: Reload system systemd
-      ansible.builtin.systemd_service:
-        daemon_reload: true
+      - name: ObtenerUID del usuario {{ pz_user }}
+        ansible.builtin.command: "id -u {{ pz_user }}"
+        register: pz_uid
+        changed_when: false
+
+      - name: Habilitar linger para el usuario
+        ansible.builtin.command: "loginctl enable-linger {{ pz_user }}"
+        args:
+          creates: "/var/lib/systemd/linger/{{ pz_user }}"
+
+      - name: Crear directorio de override en systemd
+        ansible.builtin.file:
+          path: "/etc/systemd/system/user@{{ pz_uid.stdout }}.service.d"
+          state: directory
+          mode: '0755'
+
+      - name: Configurar tiempo de apagado (graceful shutdown)
+        ansible.builtin.copy:
+          dest: "/etc/systemd/system/user@{{ pz_uid.stdout }}.service.d/override.conf"
+          content: |
+            [Service]
+            TimeoutStopSec=60s
+          mode: '0644'
+
+      - name: Recargar daemon de systemd y asegurar manager activo
+        ansible.builtin.systemd:
+          daemon_reload: yes
+          name: "user@{{ pz_uid.stdout }}"
+          state: started
+
+    # ==========================================
+    # 3. Instalación de pzsvrtool y Servidor
+    # ==========================================
+      - name: Descargar e instalar paquete pzsvrtool
+        ansible.builtin.get_url:
+          url: "{{ pzsvrtool_download_url }}"
+          dest: "/usr/local/bin/pzsvrtool"
+          mode: '0755'
+
+      - name: Crear directorio de configuración de pzsvrtool
+        ansible.builtin.file:
+          path: "/home/{{ pz_user }}/.config/pzsvrtool"
+          state: directory
+          owner: "{{ pz_user }}"
+          group: "{{ pz_user }}"
+          mode: '0750'
+
+      - name: Configurar pzsvrtool de forma no interactiva
+        ansible.builtin.template:
+          src: pzsvrtool.conf.j2
+          dest: "/home/{{ pz_user }}/.config/pzsvrtool/config"
+          owner: "{{ pz_user }}"
+          group: "{{ pz_user }}"
+          mode: '0600'
+
+      - name: Instalar servidor dedicado con pzsvrtool
+        ansible.builtin.command: "pzsvrtool install"
+        become_user: "{{ pz_user }}"
+        args:
+          creates: "/home/{{ pz_user }}/Zomboid/Server"
+
+      - name: Crear directores de servicios de usuario systemd
+        ansible.builtin.file:
+          path: "/home/{{ pz_user }}/.config/systemd/user/pzsvrtool.service.d"
+          state: directory
+          owner: "{{ pz_user }}"
+          group: "{{ pz_user }}"
+          mode: '0755'
+
+      - name: Mantener servicio pzsvrtool activo tras tmux
+        ansible.builtin.copy:
+          dest: "/home/{{ pz_user }}/.config/systemd/user/pzsvrtool.service.d/override.conf"
+          content: |
+            [Service]
+            RemainAfterExit=yes
+          owner: "{{ pz_user }}"
+          group: "{{ pz_user }}"
+          mode: '0644'
+
+      - name: Habilitar e iniciar servicio de Project Zomboid
+        ansible.builtin.systemd:
+          name: pzsvrtool
+          scope: user
+          enabled: yes
+          state: started
+        become_user: "{{ pz_user }}"
+        environment:
+          XDG_RUNTIME_DIR: "/run/user/{{ pz_uid.stdout }}"
+
+      - name: Verificar que el proceso esté en ejecución
+        ansible.builtin.command: "pgrep -u {{ pz_user }} -f ProjectZomboid32"
+        register: pz_process
+        changed_when: false
+        retries: 3
+        delay: 5
+
+    # ==========================================
+    # 5. Sistema de Actualización Automática
+    # ==========================================
+      - name: Instalar script de actualización automática
+        ansible.builtin.template:
+          src: pz_auto_update.sh.j2
+          dest: "/home/{{ pz_user }}/bin/pz_auto_update.sh"
+          owner: "{{ pz_user }}"
+          group: "{{ pz_user }}"
+          mode: '0755'
+
+      - name: Configurar service y timer de actualización en systemd
+        ansible.builtin.template:
+          src: "{{ item.src }}"
+          dest: "/home/{{ pz_user }}/.config/systemd/user/{{ item.dest }}"
+          owner: "{{ pz_user }}"
+          group: "{{ pz_user }}"
+          mode: '0644'
+        loop:
+          - { src: 'pz_update.service.j2', dest: 'pz_update.service' }
+          - { src: 'pz_update.timer.j2', dest: 'pz_update.timer' }
+
+      - name: Gestionar el timer de actualización automática
+        ansible.builtin.systemd:
+          name: pz_update.timer
+          scope: user
+          enabled: "{{ pz_auto_update_enabled }}"
+          state: "{{ 'started' if pz_auto_update_enabled else 'stopped' }}"
+        become_user: "{{ pz_user }}"
+        environment:
+          XDG_RUNTIME_DIR: "/run/user/{{ pz_uid.stdout }}"
+
+    # ==========================================
+    # 6. Red y Firewall (UFW)
+    # ==========================================
+      - name: Configurar reglas de Firewall (UFW)
+        community.general.ufw:
+          rule: allow
+          port: "{{ item.port }}"
+          proto: "{{ item.proto }}"
+        loop:
+          - { port: '22', proto: 'tcp' }
+          - { port: '16261', proto: 'udp' }
+          - { port: '16262', proto: 'udp' }
+
+      - name: Activar UFW
+        community.general.ufw:
+          state: enabled
+
+    # ==========================================
+    # 7. Verificación y Salida
+    # ==========================================
+      - name: Verificar estado de linger y servicio
+        ansible.builtin.stat:
+          path: "/var/lib/systemd/linger/{{ pz_user }}"
+        register: linger_check
+
+      - name: Mostrar resumen del despliegue
+        ansible.builtin.debug:
+          msg:
+            - "Despliegue de Project Zomboid completado con éxito."
+            - "Usuario: {{ pz_user }}"
+            - "Linger activo: {{ linger_check.stat.exists }}"
+            - "Actualización automática: {{ pz_auto_update_enabled }}"
+            - "Update logs: sudo -iu {{ pz_user }} journalctl --user -u pz-auto-update.service"
+
+    handlers:
+      - name: Reload system systemd
+        ansible.builtin.systemd_service:
+          daemon_reload: true
