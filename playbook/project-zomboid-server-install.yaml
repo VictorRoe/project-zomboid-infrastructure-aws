@@ -150,17 +150,13 @@
         update_cache: true
         cache_valid_time: 3600
 
-    # PRIMERO CREAMOS EL USUARIO DE PROJECT ZOMBOID
     - name: Create dedicated Project Zomboid account
       ansible.builtin.user:
         name: "{{ pz_user }}"
         home: "{{ pz_home }}"
         shell: /bin/bash
         create_home: true
-        system: false
-        state: present
 
-    # AHORA SÍ PODEMOS CREAR DIRECTORIOS ASIGNADOS A ESE USUARIO
     - name: Ensure Steam directory exists for pzserver
       ansible.builtin.file:
         path: "{{ pz_home }}/Steam"
@@ -177,45 +173,6 @@
         owner: "{{ pz_user }}"
         group: "{{ pz_user }}"
         creates: "{{ pz_home }}/Steam/steamcmd.sh"
-
-    - name: Check whether swap file exists
-      ansible.builtin.stat:
-        path: "{{ pz_swap_file }}"
-      register: pz_swap_file_stat
-
-    - name: Create swap file
-      ansible.builtin.command:
-        cmd: "fallocate -l {{ pz_swap_size_gb }}G {{ pz_swap_file }}"
-      when: not pz_swap_file_stat.stat.exists
-
-    - name: Secure swap file permissions
-      ansible.builtin.file:
-        path: "{{ pz_swap_file }}"
-        owner: root
-        group: root
-        mode: "0600"
-
-    - name: Format swap file
-      ansible.builtin.command:
-        cmd: "mkswap {{ pz_swap_file }}"
-      when: not pz_swap_file_stat.stat.exists
-
-    - name: Persist swap file in fstab
-      ansible.builtin.lineinfile:
-        path: /etc/fstab
-        line: "{{ pz_swap_file }} none swap sw 0 0"
-        state: present
-
-    - name: Check active swap files
-      ansible.builtin.command:
-        cmd: swapon --show=NAME --noheadings
-      register: pz_active_swap
-      changed_when: false
-
-    - name: Enable swap file
-      ansible.builtin.command:
-        cmd: "swapon {{ pz_swap_file }}"
-      when: pz_swap_file not in pz_active_swap.stdout_lines
 
     - name: Read pzserver UID
       ansible.builtin.command:

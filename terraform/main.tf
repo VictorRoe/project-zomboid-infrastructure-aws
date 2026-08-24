@@ -22,19 +22,6 @@ data "aws_ebs_snapshot" "latest_zomboid_snapshot" {
   }
 }
 
-resource "aws_ebs_volume" "pz_data_volume" {
-  availability_zone = var.availability_zone
-  size              = 30
-  type              = "gp3"
-
-  snapshot_id = length(data.aws_ebs_snapshot.latest_zomboid_snapshot) > 0 ? data.aws_ebs_snapshot.latest_zomboid_snapshot[0].id : null
-
-  tags = {
-    Name = "pz-world-data"
-  }
-}
-
-
 resource "aws_security_group" "pz_sg" {
   name        = "pz-server-sg"
   description = "Puertos requeridos para Project Zomboid"
@@ -75,51 +62,33 @@ resource "aws_instance" "pz_server" {
   availability_zone      = var.availability_zone
   vpc_security_group_ids = [aws_security_group.pz_sg.id]
 
+  root_block_device {
+    volume_size           = 30
+    volume_type           = "gp3"
+    delete_on_termination = true
+    tags = {
+      Name = "pz-world-data-root"
+    }
+  }
+
+
   user_data = <<-EOF
               #!/bin/bash
               set -e
 
-              # Esperar a que el volumen EBS secundario aparezca en el sistema
-              until [ -b /dev/nvme1n1 ] || [ -b /dev/xvdf ] || [ -b /dev/sdb ]; do sleep 2; done
-
-              DEVICE=$(lsblk -pn -o NAME | grep -v "$(lsblk -pn -o NAME,MOUNTPOINT | grep '/$' | awk '{print $1}')" | head -n 1)
-
-              # Formatear solo si el volumen no tiene un sistema de archivos previo
-              if ! blkid $DEVICE; then
-                mkfs.ext4 $DEVICE
-              fi
-
-              # Crear directorio de persistencia y montar el disco
-              mkdir -p /home/pzserver/Zomboid
-              mount $DEVICE /home/pzserver/Zomboid
-
-              # Agregar al fstab usando UUID para evitar problemas con nombres de dispositivos
-              UUID=$(blkid -s UUID -o value $DEVICE)
-              echo "UUID=$UUID /home/pzserver/Zomboid ext4 defaults,nofail 0 2" >> /etc/fstab
-
-              # Instalar Ansible y dependencias
               apt-get update -y
               apt-get install -y python3-pip git software-properties-common
               add-apt-repository --yes --update ppa:ansible/ansible
               apt-get install -y ansible
 
-              # Clonar y ejecutar el playbook
               mkdir -p /home/ubuntu/repo
-              cd /home/ubuntu/repo
-              git clone https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git
+              git clone https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git /home/ubuntu/repo
               chown -R ubuntu:ubuntu /home/ubuntu/repo
 
-              su - ubuntu -c "cd /home/ubuntu/repo/project-zomboid-infrastructure-aws/playbook && ansible-playbook -i inventory.ini project-zomboid-server-install.yaml"
+              su - ubuntu -c "cd /home/ubuntu/repo/playbook && ansible-playbook -i inventory.ini project-zomboid-server-install.yaml"
               EOF
 
   tags = {
     Name = "PZ-Server-Instance"
   }
-}
-
-# 6. Vinculación del Volumen EBS
-resource "aws_volume_attachment" "ebs_att" {
-  device_name = "/dev/sdf"
-  volume_id   = aws_ebs_volume.pz_data_volume.id
-  instance_id = aws_instance.pz_server.id
 }
