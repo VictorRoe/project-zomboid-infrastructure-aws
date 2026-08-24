@@ -109,7 +109,7 @@ resource "aws_instance" "pz_server" {
               git clone https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git
               chown -R ubuntu:ubuntu /home/ubuntu/repo
 
-              su - ubuntu -c "cd /home/ubuntu/repo/project-zomboid-infrastructure-aws/playbook && ansible-playbook -i inventory.ini project-zomboid-pzsvrtool.yml"
+              su - ubuntu -c "cd /home/ubuntu/repo/project-zomboid-infrastructure-aws/playbook && ansible-playbook -i inventory.ini project-zomboid-server-install.yaml"
               EOF
 
   tags = {
