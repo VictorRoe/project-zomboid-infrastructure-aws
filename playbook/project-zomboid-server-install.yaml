@@ -85,10 +85,10 @@
     - name: Validate supported host
       ansible.builtin.assert:
         that:
-          - ansible_os_family == 'Debian'
-          - ansible_architecture in ['x86_64', 'amd64']
-          - ansible_memtotal_mb | int >= pz_min_ram_mb | int
-          - ansible_processor_vcpus | int >= pz_min_vcpus | int
+          - ansible_facts['os_family'] == 'Debian'
+          - ansible_facts['architecture'] in ['x86_64', 'amd64']
+          - ansible_facts['memtotal_mb'] | int >= pz_min_ram_mb | int
+          - ansible_facts['processor_vcpus'] | int >= pz_min_vcpus | int
         fail_msg: >-
           This playbook expects Debian/Ubuntu x86_64 with at least
           {{ pz_min_vcpus }} vCPU and approximately {{ pz_min_ram_mb }} MB usable RAM.
@@ -118,23 +118,6 @@
       register: pz_dpkg_i386
       changed_when: "'added' in pz_dpkg_i386.stdout"
 
-    - name: Ensure Steam directory exists for pzserver
-      ansible.builtin.file:
-        path: "{{ pz_home }}/Steam"
-        state: directory
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        mode: "0755"
-
-    - name: Download SteamCMD directly if missing
-      ansible.builtin.unarchive:
-        src: https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz
-        dest: "{{ pz_home }}/Steam"
-        remote_src: true
-        owner: "{{ pz_user }}"
-        group: "{{ pz_user }}"
-        creates: "{{ pz_home }}/Steam/steamcmd.sh"
-
     - name: Install base packages and pzsvrtool runtime dependencies
       ansible.builtin.apt:
         name:
@@ -156,17 +139,17 @@
           - sqlite3
           - tmux
           - lib32gcc-s1
+          - libc6:i386
+          - libstdc++6:i386
+          - lib32stdc++6
           - ca-certificates
           - dbus-user-session
           - ufw
-          - libc6:i386
-          - libstdc++6:i386
-          - lib32gcc-s1
-          - lib32stdc++6
         state: present
         update_cache: true
         cache_valid_time: 3600
 
+    # PRIMERO CREAMOS EL USUARIO DE PROJECT ZOMBOID
     - name: Create dedicated Project Zomboid account
       ansible.builtin.user:
         name: "{{ pz_user }}"
@@ -175,6 +158,24 @@
         create_home: true
         system: false
         state: present
+
+    # AHORA SÍ PODEMOS CREAR DIRECTORIOS ASIGNADOS A ESE USUARIO
+    - name: Ensure Steam directory exists for pzserver
+      ansible.builtin.file:
+        path: "{{ pz_home }}/Steam"
+        state: directory
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        mode: "0755"
+
+    - name: Download SteamCMD directly if missing
+      ansible.builtin.unarchive:
+        src: https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz
+        dest: "{{ pz_home }}/Steam"
+        remote_src: true
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        creates: "{{ pz_home }}/Steam/steamcmd.sh"
 
     - name: Check whether swap file exists
       ansible.builtin.stat:
