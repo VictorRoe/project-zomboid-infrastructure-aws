@@ -91,7 +91,7 @@
           - ansible_facts['processor_vcpus'] | int >= pz_min_vcpus | int
         fail_msg: >-
           This playbook expects Debian/Ubuntu x86_64 with at least
-          {{ pz_min_vcpus }} vCPU and approximately {{ pz_min_ram_mb }} MB usable RAM.
+          {{ pz_min_vcpus }} vCPU and approximate ly {{ pz_min_ram_mb }} MB usable RAM.
 
     - name: Validate Project Zomboid variables
       ansible.builtin.assert:
@@ -113,10 +113,11 @@
 
   tasks:
     - name: Enable i386 architecture for SteamCMD
-      ansible.builtin.command:
-        cmd: dpkg --add-architecture i386
+      ansible.builtin.command: |
+        dpkg --add-architecture i386
+        apt-get update -y
       register: pz_dpkg_i386
-      changed_when: "'added' in pz_dpkg_i386.stdout"
+      changed_when: "'added' in pz_dpkg_i386.stdout or pz_dpkg_i386.rc == 0"
 
     - name: Install base packages and pzsvrtool runtime dependencies
       ansible.builtin.apt:
