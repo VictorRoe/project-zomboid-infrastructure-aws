@@ -113,11 +113,11 @@
 
   tasks:
     - name: Enable i386 architecture for SteamCMD
-      ansible.builtin.command: |
+      ansible.builtin.shell: |
         dpkg --add-architecture i386
         apt-get update -y
       register: pz_dpkg_i386
-      changed_when: "'added' in pz_dpkg_i386.stdout or pz_dpkg_i386.rc == 0"
+      changed_when: pz_dpkg_i386.rc == 0
 
     - name: Install base packages and pzsvrtool runtime dependencies
       ansible.builtin.apt:
