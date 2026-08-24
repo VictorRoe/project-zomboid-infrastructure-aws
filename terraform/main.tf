@@ -34,6 +34,7 @@ resource "aws_ebs_volume" "pz_data_volume" {
   }
 }
 
+
 resource "aws_security_group" "pz_sg" {
   name        = "pz-server-sg"
   description = "Puertos requeridos para Project Zomboid"
@@ -67,8 +68,9 @@ resource "aws_security_group" "pz_sg" {
   }
 }
 
+# 5. Instancia EC2 con script de User Data
 resource "aws_instance" "pz_server" {
-  ami                    = "ami-05401e1394491333f" # Ubuntu Server
+  ami                    = "ami-0b6d9d3d33ba97d99" # Ubuntu Server
   instance_type          = var.instance_type
   availability_zone      = var.availability_zone
   vpc_security_group_ids = [aws_security_group.pz_sg.id]
@@ -102,11 +104,12 @@ resource "aws_instance" "pz_server" {
               apt-get install -y ansible
 
               # Clonar y ejecutar el playbook
-              mkdir -p /home/ubuntu/playbook
-              git clone https://github.com/TU_USUARIO/TU_REPO_ANSIBLE.git /home/ubuntu/playbook
-              chown -R ubuntu:ubuntu /home/ubuntu/playbook
+              mkdir -p /home/ubuntu/repo
+              cd /home/ubuntu/repo
+              git clone https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git
+              chown -R ubuntu:ubuntu /home/ubuntu/repo
 
-              su - ubuntu -c "cd /home/ubuntu/playbook && ansible-playbook -i inventory.ini project-zomboid-pzsvrtool.yml"
+              su - ubuntu -c "cd /home/ubuntu/repo/project-zomboid-infrastructure-aws/playbook && ansible-playbook -i inventory.ini project-zomboid-pzsvrtool.yml"
               EOF
 
   tags = {
@@ -114,6 +117,7 @@ resource "aws_instance" "pz_server" {
   }
 }
 
+# 6. Vinculación del Volumen EBS
 resource "aws_volume_attachment" "ebs_att" {
   device_name = "/dev/sdf"
   volume_id   = aws_ebs_volume.pz_data_volume.id
