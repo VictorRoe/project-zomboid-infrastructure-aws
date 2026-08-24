@@ -3,7 +3,7 @@ output "public_ip" {
   description = "IP Pública para conectarse al juego"
 }
 
-output "ebs_volume_id" {
-  value       = aws_ebs_volume.pz_data_volume.id
-  description = "ID del volumen EBS enlazado"
+output "root_volume_id" {
+  value       = aws_instance.pz_server.root_block_device[0].volume_id
+  description = "ID del disco único EBS (Root Volume)"
 }
