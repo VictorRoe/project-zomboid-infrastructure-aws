@@ -1,0 +1,87 @@
+---
+# Defaults for project-zomboid-server-install.yml. Override with --extra-vars.
+# -------------------------------------------------------------------------
+# Host / account
+# -------------------------------------------------------------------------
+pz_user: pzserver
+pz_home: "/home/{{ pz_user }}"
+
+# pzsvrtool: pin the tool itself; PZ game updates are managed separately.
+pzsvrtool_version: "1.7.3"
+pzsvrtool_deb_url: >-
+  https://github.com/Lu5ck/pzsvrtool/releases/download/{{ pzsvrtool_version }}/pzsvrtool.x86_64.deb
+pzsvrtool_deb_path: "/tmp/pzsvrtool-{{ pzsvrtool_version }}.deb"
+
+# -------------------------------------------------------------------------
+# Project Zomboid
+# -------------------------------------------------------------------------
+# No spaces. Changing this later selects/creates another PZ server world.
+pz_server_name: zomboid
+
+# Empty string = Steam stable/public branch.
+# Example beta value: "42.19"
+pz_branch: ""
+
+# Root admin used by pzsvrtool on server startup.
+# Empty = generate a random password on first run and keep it in
+# pz_admin_password_file. A supplied value (--extra-vars / Vault) must be
+# >= 12 chars, not a known weak value, and contain no whitespace or '='.
+pz_admin_name: pzadmin
+pz_admin_password: ""
+pz_admin_password_file: "{{ pz_home }}/pzsvrtool/.admin_password"
+pz_admin_password_denylist:
+  - test
+  - password
+  - admin
+  - changeme
+  - pzadmin
+  - CHANGE_ME_USE_ANSIBLE_VAULT
+
+# Keep the game's Java heap controlled by ProjectZomboid64.json; provide
+# host headroom with VM RAM plus swap instead of raising -Xmx.
+pz_swap_file: /swapfile
+pz_swap_size_gb: 2
+
+# pzsvrtool behavior
+pz_shutdown_countdown_minutes: 5
+pz_backup_enabled: true
+pz_backup_limit: 10
+pz_discord_webhook: ""
+
+# -------------------------------------------------------------------------
+# Firewall
+# -------------------------------------------------------------------------
+pz_manage_ufw: true
+pz_ssh_port: 22
+pz_udp_ports:
+  - 16261
+  - 16262
+  - 8766
+
+# -------------------------------------------------------------------------
+# Automatic PZ updates
+# -------------------------------------------------------------------------
+pz_auto_update_enabled: true
+
+# Timer checks periodically, but maintenance only STARTS inside this window.
+# Supports normal windows (03:00-06:00) and crossing-midnight windows
+# (23:00-02:00).
+pz_update_window_start: "03:00"
+pz_update_window_end: "06:00"
+pz_update_timezone: "America/Argentina/Buenos_Aires"
+
+# How frequently Steam is checked. Outside the window the check exits fast.
+pz_update_check_minutes: 15
+
+# Player warning before shutting down for an actual game update.
+pz_update_countdown_minutes: 5
+
+# Maximum time to wait for the graceful shutdown to complete.
+pz_update_shutdown_timeout_minutes: 20
+
+# -------------------------------------------------------------------------
+# Basic host requirements
+# -------------------------------------------------------------------------
+# 9000 MB intentionally allows a 10 GiB VM to report ~9.7 GiB usable RAM.
+pz_min_ram_mb: 7500
+pz_min_vcpus: 2

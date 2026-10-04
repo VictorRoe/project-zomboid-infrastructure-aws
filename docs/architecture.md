@@ -38,6 +38,7 @@ There is no remote state, CI, or image pipeline. Terraform state is local to the
 /home/pzserver/
 ├── pzsvrtool/
 │   ├── pzsvrtool.config          # server name, admin, backup settings (0600)
+│   ├── .admin_password           # root admin password, generated or supplied (0600)
 │   └── pz-auto-update.sh         # update checker (run by the user timer)
 ├── pzserver/                     # game install (SteamCMD app 380870)
 ├── Steam/steamcmd.sh
@@ -64,6 +65,6 @@ The game runs as the **systemd user service** `pzsvrtool@<name>.service` of `pzs
 |---|---|
 | ~~[#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)~~ | Fixed: the instance is restored from the latest snapshot on create (D12) |
 | ~~[#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)~~ | Fixed: the script reads its configuration from Terraform outputs (D16) |
-| [#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3) | Default admin password `test` passes validation |
+| ~~[#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)~~ | Fixed: no default password; one is generated and persisted (D17) |
 | ~~[#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)~~ | Fixed: the AMI is resolved per region (D10) |
 | ~~[#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)~~ | Fixed: optional key pair; the backup aborts unless the stop is confirmed (D14) |

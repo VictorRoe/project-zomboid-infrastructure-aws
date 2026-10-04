@@ -1,0 +1,28 @@
+---
+# Variable validation. `quiet` (not no_log) keeps fail_msg visible; assert
+# output lists the expressions, never the password value.
+- name: Validate server and update variables
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - pz_server_name is match('^[A-Za-z0-9._-]+$')
+      - pz_admin_name | length > 0
+      - pz_update_window_start is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+      - pz_update_window_end is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+      - pz_update_check_minutes | int >= 5
+      - pz_update_countdown_minutes | int >= 1
+    fail_msg: Check server/admin/update variables.
+
+- name: Validate supplied admin password
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - pz_admin_password | length >= 12
+      - (pz_admin_password | lower) not in (pz_admin_password_denylist | map('lower') | list)
+      - not (pz_admin_password is search('\\s'))
+      - "'=' not in pz_admin_password"
+    fail_msg: >-
+      pz_admin_password must be at least 12 characters, not a known weak value,
+      and contain no whitespace or '=' (pzsvrtool config format). Leave it empty
+      to generate a random password.
+  when: pz_admin_password | length > 0

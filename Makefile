@@ -3,9 +3,9 @@ TF ?= terraform
 TF_DIR := terraform
 PLAYBOOK := playbook/project-zomboid-server-install.yml
 
-.PHONY: test tf-test user-data-check script-test ansible-check
+.PHONY: test tf-test user-data-check script-test ansible-check ansible-test
 
-test: tf-test user-data-check script-test ansible-check
+test: tf-test user-data-check script-test ansible-check ansible-test
 
 tf-test:
 	$(TF) -chdir=$(TF_DIR) init -backend=false -input=false >/dev/null
@@ -28,3 +28,8 @@ script-test:
 
 ansible-check:
 	ansible-playbook --syntax-check -i playbook/inventory.ini $(PLAYBOOK)
+
+# Admin password validation/generation on localhost (no root, no AWS).
+ansible-test:
+	@if command -v shellcheck >/dev/null; then shellcheck tests/ansible/run.sh; fi
+	tests/ansible/run.sh

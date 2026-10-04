@@ -7,10 +7,10 @@ Sequences that span several files. Components are described in [architecture.md]
 1. Terraform resolves the Ubuntu 24.04 AMI for `aws_region` (or uses `ami_id`), then creates `pz-server-sg` and `PZ-Server-Instance` (30 GB gp3 root). On later applies, image changes are ignored, so the instance is never replaced implicitly.
 2. cloud-init runs `user_data` as root: installs Ansible from its PPA, clones the GitHub repo into `/home/ubuntu/repo`, and runs the playbook as `ubuntu` against `localhost` with `-e pz_server_name=<var>`.
 3. The playbook:
-   1. Pre-tasks assert Debian x86_64, at least 2 vCPU and about 7.5 GB RAM, then validate the variables.
+   1. Pre-tasks assert Debian x86_64, at least 2 vCPU and about 7.5 GB RAM, then validate the variables (`tasks/validate.yml`). A supplied admin password must pass the strength rules.
    2. It installs packages, creates `pzserver`, and creates and enables the swap file.
    3. It enables linger, gives the user manager `TimeoutStopSec=20m`, and installs pzsvrtool (pinned `.deb`).
-   4. It writes `pzsvrtool.config` and installs the game with `pzsvrtool install`. If `start-server.sh` is still missing, it falls back to SteamCMD directly.
+   4. It resolves the admin password (`tasks/admin_password.yml`): a supplied one is stored; otherwise the stored one is reused, or a random one is generated and stored in `.admin_password` (0600). Then it writes `pzsvrtool.config` and installs the game with `pzsvrtool install`. If `start-server.sh` is still missing, it falls back to SteamCMD directly.
    5. It enables and starts `pzsvrtool@<name>.service`, then waits for the `ProjectZomboid` process.
    6. It installs the auto-update script, service and timer.
    7. It sets up UFW: SSH first, then the game UDP ports, then enables the firewall.

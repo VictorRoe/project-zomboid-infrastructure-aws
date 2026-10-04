@@ -25,6 +25,7 @@ make test                                                     # all checks
 make tf-test                                                  # init + fmt -check + validate + terraform test
 make user-data-check                                          # render EC2 boot script, bash -n + shellcheck
 make script-test                                              # backup script vs stubbed aws/ssh/terraform (tests/script/bin)
+make ansible-test                                             # admin password validation/generation on localhost
 terraform -chdir=terraform test -filter=tests/ami.tftest.hcl  # single suite
 ```
 
@@ -33,7 +34,7 @@ Ansible (validate locally without a target host):
 ```bash
 ansible-playbook --syntax-check -i playbook/inventory.ini playbook/project-zomboid-server-install.yml
 ansible-lint playbook/project-zomboid-server-install.yml   # if installed
-# Override vars instead of editing defaults, e.g. the admin password:
+# Override vars instead of editing defaults (playbook/vars/main.yml), e.g. a supplied admin password:
 ansible-playbook -i playbook/inventory.ini playbook/project-zomboid-server-install.yml -e pz_admin_password=...
 ```
 
@@ -46,7 +47,7 @@ Teardown with backup: `script/destroy-and-backup.sh` (any cwd; uses `terraform -
 3. **Ansible playbook** (`playbook/project-zomboid-server-install.yml`, `inventory.ini` = local connection) configures the host:
    - Creates the `pzserver` user, swap file, and installs the pinned `pzsvrtool` .deb (Lu5ck/pzsvrtool), which wraps SteamCMD (app 380870) and tmux.
    - Runs the server as a **systemd user service** `pzsvrtool@<pz_server_name>.service` under `pzserver` with linger enabled. All `systemctl --user` calls go through `runuser` with explicit `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS`; preserve that pattern when adding tasks.
-   - Writes `~pzserver/pzsvrtool/pzsvrtool.config` (no spaces or `=` allowed in the admin password — enforced by a pre-task assert).
+   - Defaults live in `playbook/vars/main.yml`; validation in `tasks/validate.yml`. The admin password is supplied or generated and persisted in `~pzserver/pzsvrtool/.admin_password` (`tasks/admin_password.yml`), then written to `pzsvrtool.config`. Never pass secrets through Terraform/user_data, and keep `no_log` on tasks that handle the password.
    - Installs an embedded `pz-auto-update.sh` plus a user `.service`/`.timer` that polls Steam and only performs updates inside a configured time window (graceful countdown → wait for shutdown → backup → reinstall → verify buildid → restart, with recovery restart on failure).
    - Configures UFW last (SSH allowed before enabling). UFW ports must stay in sync with the Terraform security group.
 4. **Backup/restore**: `destroy-and-backup.sh` stops the service over SSH (needs `ssh_public_key`/`ssh_key_name`; aborts unless the game process is confirmed gone), snapshots the root volume, tags it `pz-world-data-snapshot`, writes the snapshot ID to S3, then `terraform destroy`. On the next create, `main.tf` registers an image (`aws_ami.restored`) from the latest tagged snapshot (or `restore_snapshot_id`) and boots from it; `restore_from_snapshot = false` opts out.
@@ -57,10 +58,6 @@ Teardown with backup: `script/destroy-and-backup.sh` (any cwd; uses `terraform -
 - `aws_instance.pz_server` ignores `ami` changes on purpose: the root disk is the world, so neither a newer Ubuntu image nor a newer snapshot may replace a running server. Never remove that without a backup strategy.
 - The backup script must never snapshot without a confirmed stop; new AWS/SSH/Terraform calls in it need matching behaviour in `tests/script/bin` stubs.
 - Terraform tests mock AWS; a mocked `aws_ebs_snapshot_ids` returns no IDs, so tests needing a snapshot must `override_data` every snapshot data source by full address (see `terraform/tests/restore.tftest.hcl`).
-
-## Known inconsistencies to be aware of
-
-- The playbook's default `pz_admin_password` is a placeholder (`"test"`); the assert only rejects `CHANGE_ME_USE_ANSIBLE_VAULT`.
 
 ## Workflow
 

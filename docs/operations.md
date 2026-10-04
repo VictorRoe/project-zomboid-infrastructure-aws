@@ -26,6 +26,7 @@ FORCE_SNAPSHOT=1 ../script/destroy-and-backup.sh      # last resort: snapshot ev
 ## On the server
 
 ```bash
+sudo cat /home/pzserver/pzsvrtool/.admin_password    # root admin (pzadmin) password
 sudo -iu pzserver pzsvrtool console
 sudo -iu pzserver systemctl --user status pzsvrtool@zomboid.service
 sudo -iu pzserver systemctl --user list-timers pz-auto-update.timer
@@ -60,6 +61,7 @@ make tf-test          # terraform init/fmt/validate/test (mocked AWS provider)
 make ansible-check    # playbook syntax check
 make user-data-check  # render the EC2 boot script, bash -n + shellcheck
 make script-test      # backup script against stubbed aws/ssh/terraform
+make ansible-test     # admin password validation/generation on localhost
 terraform -chdir=terraform test -filter=tests/restore.tftest.hcl   # a single suite
 ```
 

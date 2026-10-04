@@ -51,3 +51,10 @@ Newest entries go at the bottom. Each entry records what was decided, why, and t
 - Existing users must set `s3_bucket_name` to the bucket they actually use.
 - A globally exported `AWS_REGION` overrides the stack's region in the script.
 - The bucket stays unmanaged, because the script's own `terraform destroy` would delete it.
+
+**D17. No default admin password; generate one on the host and keep it ([#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)).** If `pz_admin_password` is empty, which is the new default, a random 32-character alphanumeric password is generated and stored in `~pzserver/pzsvrtool/.admin_password` (0600). It is reused on later runs and survives a restore. A supplied password must be at least 12 characters, not denylisted, and free of whitespace and `=`. Why: unattended runs gave every public server the password `test`. Passing a password through Terraform or `user_data` would leak it into state and instance metadata. Consequences:
+- Operators read the password over SSH.
+- Changing the password after PZ has created the admin account may not take effect (the account is stored in PZ's database).
+- The validation assert uses `quiet` instead of `no_log`, so its error message is visible.
+
+**D18. Playbook defaults moved to `playbook/vars/main.yml`, and validation and password logic to `playbook/tasks/`.** Why: the test playbook (`tests/ansible/`) loads the same defaults and tasks without root or a real host. Consequence: `vars_files` has the same precedence as the old inline `vars`, and `--extra-vars` still wins.

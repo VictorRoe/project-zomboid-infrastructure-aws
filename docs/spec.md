@@ -21,7 +21,7 @@ Current target state of the stack. Update this file with every change and record
 
 ## Tests (offline)
 
-`make test` runs `terraform fmt/validate/test` against a mocked AWS provider and the Ansible syntax check. No AWS credentials or API calls are needed. Suites: `terraform/tests/{ami,restore,ssh,config}.tftest.hcl`; `make script-test` runs `tests/script/run.sh` (backup script with stubbed `aws`/`ssh`/`terraform`) plus shellcheck; `make user-data-check` renders the boot script and runs `bash -n` + shellcheck.
+`make test` runs `terraform fmt/validate/test` against a mocked AWS provider and the Ansible syntax check. No AWS credentials or API calls are needed. Suites: `terraform/tests/{ami,restore,ssh,config}.tftest.hcl`; `make script-test` runs `tests/script/run.sh` (backup script with stubbed `aws`/`ssh`/`terraform`) plus shellcheck; `make ansible-test` runs `tests/ansible/run.sh` (password validation and generation on localhost); `make user-data-check` renders the boot script and runs `bash -n` + shellcheck.
 
 ## Backup script
 
@@ -37,6 +37,8 @@ Current target state of the stack. Update this file with every change and record
 
 ## Host (Ansible)
 
+Defaults live in `playbook/vars/main.yml`; validation is in `playbook/tasks/validate.yml`, and admin password handling in `playbook/tasks/admin_password.yml`.
+
 | Item | Value |
 |---|---|
 | OS requirement | Debian family, x86_64, ≥ 2 vCPU, ≥ 7500 MB RAM |
@@ -44,7 +46,7 @@ Current target state of the stack. Update this file with every change and record
 | pzsvrtool | `1.7.3` (pinned `.deb`) |
 | Server name | `pz_server_name` (default `zomboid`; Terraform passes its value) |
 | Steam branch | public (`pz_branch: ""`) |
-| Admin | `pzadmin` / `test` (see [#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)) |
+| Admin | `pzadmin`. Password: supplied via `-e pz_admin_password` (≥ 12 chars, not denylisted, no whitespace/`=`), or a random 32-char alphanumeric one generated on first run. Either way it's stored in `/home/pzserver/pzsvrtool/.admin_password` (0600, `pzserver`) and reused |
 | Swap | `/swapfile`, 2 GB |
 | Backups (pzsvrtool) | enabled, limit 10; shutdown countdown 5 min |
 | Auto-update | enabled; window 03:00–06:00 `America/Argentina/Buenos_Aires`; check every 15 min; 5 min warning; 20 min shutdown timeout |
