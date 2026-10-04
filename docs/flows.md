@@ -5,7 +5,7 @@ Sequences that span several files. Components are described in [architecture.md]
 ## 1. Provisioning (`terraform apply`)
 
 1. Terraform resolves the Ubuntu 24.04 AMI for `aws_region` (or uses `ami_id`), then creates `pz-server-sg` and `PZ-Server-Instance` (30 GB gp3 root). On later applies, image changes are ignored, so the instance is never replaced implicitly.
-2. cloud-init runs `user_data` as root: installs Ansible from its PPA, clones the GitHub repo into `/home/ubuntu/repo`, and runs the playbook as `ubuntu` against `localhost`.
+2. cloud-init runs `user_data` as root: installs Ansible from its PPA, clones the GitHub repo into `/home/ubuntu/repo`, and runs the playbook as `ubuntu` against `localhost` with `-e pz_server_name=<var>`.
 3. The playbook:
    1. Pre-tasks assert Debian x86_64, at least 2 vCPU and about 7.5 GB RAM, then validate the variables.
    2. It installs packages, creates `pzserver`, and creates and enables the swap file.
@@ -32,15 +32,15 @@ The timer fires 10 minutes after boot, then every `pz_update_check_minutes`. The
 
 ## 3. Backup and destroy (`script/destroy-and-backup.sh`)
 
-Run from `terraform/`.
+Can be run from any directory.
 
-1. Reads `public_ip` from Terraform and finds the volume by tag `pz-world-data-root`.
+1. Reads `backup_bucket_name`, `aws_region`, `pz_server_name`, `public_ip` and `root_volume_id` with `terraform -chdir=<repo>/terraform output`. `S3_BUCKET`, `AWS_REGION` and `PZ_SERVER_NAME` override the first three. If any value is empty, it exits before touching anything.
 2. Stops the server over SSH (`SSH_KEY` optional):
-   1. Runs `systemctl --user stop pzsvrtool@zomboid.service` as `pzserver`, with the user bus environment set on the server side.
+   1. Runs `systemctl --user stop pzsvrtool@<pz_server_name>.service` as `pzserver`, with the user bus environment set on the server side.
    2. Polls `pgrep ProjectZomboid` until the process is gone (`STOP_TIMEOUT`, default 600 s).
    3. If SSH fails, the stop fails or the timeout passes, the script **aborts with exit 1**, before any snapshot or destroy. `FORCE_SNAPSHOT=1` continues anyway with a warning.
 3. Creates an EBS snapshot tagged `pz-world-data-snapshot` and waits for it to complete.
-4. Archives `s3://<bucket>/latest/` to `archive/<date>/` and writes the snapshot ID to `latest/snapshot_meta.txt`.
+4. Archives `s3://<bucket>/latest/` to `archive/<date>/` and uploads the snapshot ID (from a temp file) to `latest/snapshot_meta.txt`.
 5. Runs `terraform destroy -auto-approve`, which deletes the instance and its disk. The snapshot remains.
 
 ## 4. Restore (`terraform apply` after a destroy)

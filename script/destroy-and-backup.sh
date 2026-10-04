@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-S3_BUCKET="tu-bucket-zomboid-backups"
-REGION="us-east-1"
-PZ_SERVICE="pzsvrtool@zomboid.service"
+# La configuración sale de los outputs de Terraform; las variables de entorno
+# S3_BUCKET, AWS_REGION, PZ_SERVER_NAME y TF_DIR tienen prioridad.
+TF_DIR="${TF_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../terraform" && pwd)}"
 
 # Segundos máximos para que el proceso del juego termine (el countdown de pzsvrtool es de 5 min).
 STOP_TIMEOUT="${STOP_TIMEOUT:-600}"
@@ -53,18 +53,31 @@ stop_server() {
   done
 }
 
-echo "=== 1. Obteniendo IDs de la infraestructura actual ==="
-INSTANCE_IP=$(terraform output -raw public_ip 2>/dev/null)
+tf_out() {
+  terraform -chdir="$TF_DIR" output -raw "$1" 2>/dev/null || true
+}
 
-# Obtener el Volume ID del DISCO RAÍZ único asignado a la EC2
-VOLUME_ID=$(aws ec2 describe-volumes \
-  --filters "Name=tag:Name,Values=pz-world-data-root" \
-  --query "Volumes[0].VolumeId" --output text --region "$REGION")
+require() {
+  if [ -z "$2" ]; then
+    echo "Error: no se pudo resolver $1 (output de Terraform en $TF_DIR o variable de entorno)." >&2
+    exit 1
+  fi
+}
 
-if [ -z "$VOLUME_ID" ] || [ "$VOLUME_ID" == "None" ]; then
-  echo "Error: No se encontró el disco raíz con el tag 'pz-world-data-root'."
-  exit 1
-fi
+echo "=== 1. Obteniendo configuración e IDs de la infraestructura actual ==="
+S3_BUCKET="${S3_BUCKET:-$(tf_out backup_bucket_name)}"
+REGION="${AWS_REGION:-$(tf_out aws_region)}"
+PZ_SERVER_NAME="${PZ_SERVER_NAME:-$(tf_out pz_server_name)}"
+INSTANCE_IP="$(tf_out public_ip)"
+# Disco raíz exacto de la EC2 actual (un filtro por tag podría devolver un volumen viejo).
+VOLUME_ID="$(tf_out root_volume_id)"
+
+require "el bucket S3 (backup_bucket_name / S3_BUCKET)" "$S3_BUCKET"
+require "la región (aws_region / AWS_REGION)" "$REGION"
+require "el nombre del servidor (pz_server_name / PZ_SERVER_NAME)" "$PZ_SERVER_NAME"
+require "la IP pública (public_ip)" "$INSTANCE_IP"
+require "el volumen raíz (root_volume_id)" "$VOLUME_ID"
+PZ_SERVICE="pzsvrtool@${PZ_SERVER_NAME}.service"
 
 echo "=== 2. Apagando servicio de Project Zomboid vía SSH ==="
 if stop_server; then
@@ -76,7 +89,7 @@ else
   exit 1
 fi
 
-echo "=== 3. Creando Snapshot del disco único de 30 GB ==="
+echo "=== 3. Creando snapshot del disco raíz $VOLUME_ID ==="
 SNAPSHOT_ID=$(aws ec2 create-snapshot \
   --volume-id "$VOLUME_ID" \
   --description "Backup completo de EC2 previo a destruccion" \
@@ -88,11 +101,13 @@ echo "Snapshot creada: $SNAPSHOT_ID. Esperando confirmación..."
 aws ec2 wait snapshot-completed --snapshot-id "$SNAPSHOT_ID" --region "$REGION"
 
 echo "=== 4. Guardando metadatos en Amazon S3 ==="
-aws s3 sync "s3://$S3_BUCKET/latest/" "s3://$S3_BUCKET/archive/$(date +%Y-%m-%d)/" || true
-echo "snapshot_id=$SNAPSHOT_ID" > snapshot_meta.txt
-aws s3 cp snapshot_meta.txt "s3://$S3_BUCKET/latest/snapshot_meta.txt"
+aws s3 sync "s3://$S3_BUCKET/latest/" "s3://$S3_BUCKET/archive/$(date +%Y-%m-%d)/" --region "$REGION" || true
+META_FILE="$(mktemp)"
+trap 'rm -f "$META_FILE"' EXIT
+echo "snapshot_id=$SNAPSHOT_ID" > "$META_FILE"
+aws s3 cp "$META_FILE" "s3://$S3_BUCKET/latest/snapshot_meta.txt" --region "$REGION"
 
 echo "=== 5. Destruyendo infraestructura con Terraform ==="
-terraform destroy -auto-approve
+terraform -chdir="$TF_DIR" destroy -auto-approve
 
 echo "=== Proceso completado. La instancia y su disco fueron eliminados. Snapshot guardada en AWS. ==="

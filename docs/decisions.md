@@ -46,3 +46,8 @@ Newest entries go at the bottom. Each entry records what was decided, why, and t
 - SSM Session Manager is a possible follow-up; it needs an IAM role.
 
 **D15. Script tests use PATH stubs rather than bats.** `tests/script/bin/{aws,ssh,terraform}` record their calls and follow `STUB_*` variables. Why: no extra dependency, and nothing touches AWS. Consequence: the stubs must follow any new CLI calls the script makes.
+
+**D16. Terraform outputs are the single source of configuration for the backup ([#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)).** The script reads `backup_bucket_name`, `aws_region`, `pz_server_name`, `public_ip` and `root_volume_id` via `terraform -chdir`, with env overrides, and fails fast on missing values. `pz_server_name` also reaches the playbook through `user_data`. Why: the bucket, region and service name differed between Terraform and the script, the script only worked from `terraform/`, and a tag lookup could pick a stale volume. Consequences:
+- Existing users must set `s3_bucket_name` to the bucket they actually use.
+- A globally exported `AWS_REGION` overrides the stack's region in the script.
+- The bucket stays unmanaged, because the script's own `terraform destroy` would delete it.

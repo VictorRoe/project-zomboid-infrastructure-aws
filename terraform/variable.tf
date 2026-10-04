@@ -24,7 +24,7 @@ variable "instance_type" {
 variable "s3_bucket_name" {
   type        = string
   default     = "zomboid-bucket-backup"
-  description = "Nombre del bucket S3 para almacenamiento de respaldos"
+  description = "Bucket S3 existente para los metadatos de backup (no lo crea este stack: terraform destroy lo borraría)"
 }
 
 variable "ami_id" {
@@ -66,4 +66,15 @@ variable "ssh_allowed_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
   description = "CIDRs autorizados a conectarse por SSH (puerto 22)"
+}
+
+variable "pz_server_name" {
+  type        = string
+  default     = "zomboid"
+  description = "Nombre del servidor/mundo de Project Zomboid (servicio pzsvrtool@<nombre>.service)"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]+$", var.pz_server_name))
+    error_message = "pz_server_name may only contain letters, digits, '.', '_' and '-'."
+  }
 }

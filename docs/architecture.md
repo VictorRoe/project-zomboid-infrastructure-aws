@@ -53,6 +53,7 @@ The game runs as the **systemd user service** `pzsvrtool@<name>.service` of `pzs
 
 ## Coupling points
 
+- **Configuration** flows one way: Terraform variables → outputs → backup script, and → `user_data` → playbook (`pz_server_name`). Don't hardcode these values elsewhere.
 - **Ports** are declared twice: in the security group (`terraform/main.tf`) and in UFW (`pz_udp_ports` in the playbook). Keep them identical.
 - **Playbook delivery** is a `git clone` from GitHub at boot, so playbook changes only reach new instances after they are pushed to the default branch.
 - **Snapshot tag** `pz-world-data-snapshot` links the backup script (writer) and `main.tf` (reader, registers `aws_ami.restored` from it).
@@ -62,7 +63,7 @@ The game runs as the **systemd user service** `pzsvrtool@<name>.service` of `pzs
 | Issue | Summary |
 |---|---|
 | ~~[#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)~~ | Fixed: the instance is restored from the latest snapshot on create (D12) |
-| [#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2) | Bucket name, region, and server name differ or are hardcoded between Terraform and the script |
+| ~~[#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)~~ | Fixed: the script reads its configuration from Terraform outputs (D16) |
 | [#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3) | Default admin password `test` passes validation |
 | ~~[#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)~~ | Fixed: the AMI is resolved per region (D10) |
 | ~~[#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)~~ | Fixed: optional key pair; the backup aborts unless the stop is confirmed (D14) |

@@ -60,6 +60,7 @@ locals {
     repo_url    = "https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git"
     repo_branch = "main"
     repo_dir    = "/home/ubuntu/repo"
+    server_name = var.pz_server_name
   })
 }
 

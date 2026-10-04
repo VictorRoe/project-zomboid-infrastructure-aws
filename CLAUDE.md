@@ -37,7 +37,7 @@ ansible-lint playbook/project-zomboid-server-install.yml   # if installed
 ansible-playbook -i playbook/inventory.ini playbook/project-zomboid-server-install.yml -e pz_admin_password=...
 ```
 
-Teardown with backup: `script/destroy-and-backup.sh`. It calls `terraform output`/`terraform destroy` against the current directory, so it must be run from `terraform/` (e.g. `../script/destroy-and-backup.sh`).
+Teardown with backup: `script/destroy-and-backup.sh` (any cwd; uses `terraform -chdir=<repo>/terraform`, config from outputs, env overrides `S3_BUCKET`/`AWS_REGION`/`PZ_SERVER_NAME`/`TF_DIR`).
 
 ## Architecture / how the pieces connect
 
@@ -53,15 +53,14 @@ Teardown with backup: `script/destroy-and-backup.sh`. It calls `terraform output
 
 ## Invariants
 
+- Configuration flows Terraform variables → outputs → backup script, and → `user_data` → playbook (`pz_server_name`). Don't hardcode bucket/region/server name elsewhere. The S3 bucket is intentionally not managed by this stack.
 - `aws_instance.pz_server` ignores `ami` changes on purpose: the root disk is the world, so neither a newer Ubuntu image nor a newer snapshot may replace a running server. Never remove that without a backup strategy.
 - The backup script must never snapshot without a confirmed stop; new AWS/SSH/Terraform calls in it need matching behaviour in `tests/script/bin` stubs.
 - Terraform tests mock AWS; a mocked `aws_ebs_snapshot_ids` returns no IDs, so tests needing a snapshot must `override_data` every snapshot data source by full address (see `terraform/tests/restore.tftest.hcl`).
 
 ## Known inconsistencies to be aware of
 
-- `var.s3_bucket_name` (`zomboid-bucket-backup`) is unused; the script hardcodes `S3_BUCKET="tu-bucket-zomboid-backups"`.
 - The playbook's default `pz_admin_password` is a placeholder (`"test"`); the assert only rejects `CHANGE_ME_USE_ANSIBLE_VAULT`.
-- `pz_server_name` is hardcoded as `zomboid` in the backup script's service name.
 
 ## Workflow
 

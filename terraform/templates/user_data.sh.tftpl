@@ -17,4 +17,4 @@ else
   chown -R ubuntu:ubuntu ${repo_dir}
 fi
 
-su - ubuntu -c "cd ${repo_dir}/playbook && ansible-playbook -i inventory.ini project-zomboid-server-install.yml"
+su - ubuntu -c "cd ${repo_dir}/playbook && ansible-playbook -i inventory.ini project-zomboid-server-install.yml -e pz_server_name=${server_name}"

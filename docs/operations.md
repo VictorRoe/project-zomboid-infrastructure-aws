@@ -7,6 +7,7 @@ Day-to-day commands. Values are listed in [spec.md](spec.md).
 SSH access, which the backup script needs, is set in `terraform.tfvars` (gitignored):
 
 ```hcl
+s3_bucket_name    = "my-existing-bucket"            # must exist; not created by this stack
 ssh_public_key    = "ssh-ed25519 AAAA... you@host"   # or: ssh_key_name = "existing-pair"
 ssh_allowed_cidrs = ["203.0.113.4/32"]
 ```
@@ -16,8 +17,9 @@ cd terraform
 terraform init
 terraform apply                       # creates the server and bootstraps it via user_data
 terraform output -raw public_ip       # players connect to <ip>:16261
-../script/destroy-and-backup.sh       # stop, snapshot, S3 metadata, terraform destroy (run from terraform/)
+../script/destroy-and-backup.sh       # stop, snapshot, S3 metadata, terraform destroy (any cwd)
 SSH_KEY=~/.ssh/pz ../script/destroy-and-backup.sh     # with a specific identity file
+S3_BUCKET=other-bucket ../script/destroy-and-backup.sh # override an output (also AWS_REGION, PZ_SERVER_NAME, TF_DIR)
 FORCE_SNAPSHOT=1 ../script/destroy-and-backup.sh      # last resort: snapshot even if the stop can't be confirmed
 ```
 
