@@ -1,0 +1,25 @@
+# Decision Log
+
+Newest entries go at the bottom. Each entry records what was decided, why, and the consequences. The current state lives in [spec.md](spec.md).
+
+## Before 2026-10-04: Existing design (taken from the code)
+
+**D1. One EC2 instance with a single root disk holds everything.** This is simple and cheap for a small group. Consequence: a backup means snapshotting the whole root disk, and world data can't be separated from the OS.
+
+**D2. The instance configures itself (cloud-init clones the repo, then Ansible runs locally).** No SSH access or Ansible controller is needed. Consequence: the playbook comes from GitHub `main`, so unpushed changes never deploy.
+
+**D3. The game is managed by pzsvrtool (pinned 1.7.3) as a systemd user service with linger.** pzsvrtool provides tmux sessions, countdowns, backups and the install workflow. Consequences: every `systemctl --user` call needs the user bus environment, and the host-level `TimeoutStopSec=20m` gives the game time to save on shutdown.
+
+**D4. Game updates happen only inside a time window, with a backup first and a recovery restart.** Players aren't kicked at peak hours, and a failed update doesn't leave the server down. Consequence: updates can be delayed by up to a day.
+
+**D5. Destroy when idle and keep a snapshot.** This saves EC2 cost between play sessions. Consequence: restore is required for continuity, but it isn't wired yet ([#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)).
+
+**D6. The Java heap stays at the game default; extra headroom comes from swap and VM RAM.** Keeps the setup close to upstream. Consequence: the instance needs at least about 7.5 GB RAM (asserted).
+
+## 2026-10-04: Documentation and fix plan
+
+**D7. Documentation lives in `docs/`; only README, CLAUDE.md and CHANGELOG.md stay at the root.** Every change updates [spec.md](spec.md), adds an entry here, and adds a [CHANGELOG](../CHANGELOG.md) entry.
+
+**D8. Issues #1–#5 are fixed as OpenSpec changes on stacked branches**, in this order: AMI (#4) → restore (#1) → SSH (#5) → backup config (#2) → admin password (#3). The fixes touch the same files, so stacking avoids merge conflicts. Consequence: merge the branches in order.
+
+**D9. All tests run offline against mocks.** Terraform uses `terraform test` with `mock_provider`, Ansible runs on localhost, and the script runs with stubbed `aws`/`ssh`/`terraform`. Reason: no AWS spend or credentials during development. Consequence: real-AWS behavior (AMI filters, booting a restored image) still needs a manual check on the first real deploy.

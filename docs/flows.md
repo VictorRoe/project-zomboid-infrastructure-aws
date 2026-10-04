@@ -1,0 +1,45 @@
+# Flows
+
+Sequences that span several files. Components are described in [architecture.md](architecture.md).
+
+## 1. Provisioning (`terraform apply`)
+
+1. Terraform creates `pz-server-sg` and `PZ-Server-Instance` (Ubuntu AMI, 30 GB gp3 root).
+2. cloud-init runs `user_data` as root: installs Ansible from its PPA, clones the GitHub repo into `/home/ubuntu/repo`, and runs the playbook as `ubuntu` against `localhost`.
+3. The playbook:
+   1. Pre-tasks assert Debian x86_64, at least 2 vCPU and about 7.5 GB RAM, then validate the variables.
+   2. It installs packages, creates `pzserver`, and creates and enables the swap file.
+   3. It enables linger, gives the user manager `TimeoutStopSec=20m`, and installs pzsvrtool (pinned `.deb`).
+   4. It writes `pzsvrtool.config` and installs the game with `pzsvrtool install`. If `start-server.sh` is still missing, it falls back to SteamCMD directly.
+   5. It enables and starts `pzsvrtool@<name>.service`, then waits for the `ProjectZomboid` process.
+   6. It installs the auto-update script, service and timer.
+   7. It sets up UFW: SSH first, then the game UDP ports, then enables the firewall.
+   8. It checks that the service is enabled and linger is on.
+4. `terraform output public_ip` gives the address players use (UDP 16261).
+
+## 2. Automatic game update (`pz-auto-update.timer`)
+
+The timer fires 10 minutes after boot, then every `pz_update_check_minutes`. The script:
+
+1. Takes a `flock`. It exits quietly if the time is outside the update window (crossing midnight is supported).
+2. Compares the installed Steam `buildid` (app manifest) with the remote build for the branch (`app_info_print`).
+3. If they differ, and no countdown or boot is in progress:
+   1. Messages players and runs `pzsvrtool quit --time N`.
+   2. Waits for the process and service to stop.
+   3. Runs `pzsvrtool backupnow`, then reinstalls.
+   4. Verifies the new build and starts the server again.
+4. An ERR trap restarts the server if the update fails after shutdown.
+
+## 3. Backup and destroy (`script/destroy-and-backup.sh`)
+
+Run from `terraform/`.
+
+1. Reads `public_ip` from Terraform and finds the volume by tag `pz-world-data-root`.
+2. Stops the server over SSH. Failures are ignored (`|| true`); see [#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5).
+3. Creates an EBS snapshot tagged `pz-world-data-snapshot` and waits for it to complete.
+4. Archives `s3://<bucket>/latest/` to `archive/<date>/` and writes the snapshot ID to `latest/snapshot_meta.txt`.
+5. Runs `terraform destroy -auto-approve`, which deletes the instance and its disk. The snapshot remains.
+
+## 4. Restore
+
+Not implemented yet. `main.tf` finds the latest snapshot but doesn't use it; see [#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1).
