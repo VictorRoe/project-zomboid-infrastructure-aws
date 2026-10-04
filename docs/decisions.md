@@ -23,3 +23,10 @@ Newest entries go at the bottom. Each entry records what was decided, why, and t
 **D8. Issues #1–#5 are fixed as OpenSpec changes on stacked branches**, in this order: AMI (#4) → restore (#1) → SSH (#5) → backup config (#2) → admin password (#3). The fixes touch the same files, so stacking avoids merge conflicts. Consequence: merge the branches in order.
 
 **D9. All tests run offline against mocks.** Terraform uses `terraform test` with `mock_provider`, Ansible runs on localhost, and the script runs with stubbed `aws`/`ssh`/`terraform`. Reason: no AWS spend or credentials during development. Consequence: real-AWS behavior (AMI filters, booting a restored image) still needs a manual check on the first real deploy.
+
+**D10. The AMI is resolved per region, and image drift is ignored ([#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)).** A `data "aws_ami"` lookup finds the latest Canonical Ubuntu 24.04 amd64 gp3 image (`ami_id` overrides it). `availability_zone` defaults to `null`, and an explicit AZ must belong to `aws_region`. Why: the hardcoded AMI and AZ only worked in us-east-1. Consequences:
+- `lifecycle { ignore_changes = [ami] }` keeps a newer image from replacing the instance and deleting the world disk. Rebuilds are deliberate (`-replace`).
+- An existing instance keeps its original image.
+- `.terraform.lock.hcl` is now committed.
+
+**D11. Offline test harness.** `make test` runs `terraform test` with `mock_provider "aws"`, `override_data` and the Ansible syntax check. Why: no AWS spend or credentials (D9). Consequence: the real AMI filter is only exercised on the first real apply.

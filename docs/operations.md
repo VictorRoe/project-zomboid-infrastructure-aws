@@ -22,8 +22,21 @@ sudo -iu pzserver journalctl --user -u pz-auto-update.service
 sudo tail -f /var/log/cloud-init-output.log    # first-boot provisioning log
 ```
 
+## Rebuild on a newer image
+
+Image changes are ignored on a running instance. To rebuild deliberately, take a backup first, because the root disk (the world) is deleted:
+
+```bash
+terraform apply -replace=aws_instance.pz_server
+```
+
 ## Local checks (no AWS)
 
 ```bash
-ansible-playbook --syntax-check -i playbook/inventory.ini playbook/project-zomboid-server-install.yml
+make test             # everything below
+make tf-test          # terraform init/fmt/validate/test (mocked AWS provider)
+make ansible-check    # playbook syntax check
+terraform -chdir=terraform test -filter=tests/ami.tftest.hcl   # a single suite
 ```
+
+Requires Terraform >= 1.9 and ansible-core. `terraform init` downloads the provider from the registry but never calls AWS.

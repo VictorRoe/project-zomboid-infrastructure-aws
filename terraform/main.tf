@@ -22,6 +22,31 @@ data "aws_ebs_snapshot" "latest_zomboid_snapshot" {
   }
 }
 
+# Canonical's Ubuntu Server 24.04 LTS image for the configured region.
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+locals {
+  base_ami_id = var.ami_id != "" ? var.ami_id : data.aws_ami.ubuntu.id
+}
+
 resource "aws_security_group" "pz_sg" {
   name        = "pz-server-sg"
   description = "Puertos requeridos para Project Zomboid"
@@ -57,7 +82,7 @@ resource "aws_security_group" "pz_sg" {
 
 # 5. Instancia EC2 con script de User Data
 resource "aws_instance" "pz_server" {
-  ami                    = "ami-0b6d9d3d33ba97d99" # Ubuntu Server
+  ami                    = local.base_ami_id
   instance_type          = var.instance_type
   availability_zone      = var.availability_zone
   vpc_security_group_ids = [aws_security_group.pz_sg.id]
@@ -90,5 +115,11 @@ resource "aws_instance" "pz_server" {
 
   tags = {
     Name = "PZ-Server-Instance"
+  }
+
+  # The root disk holds the world: a new image must never replace a running
+  # server implicitly. Rebuild deliberately with -replace after a backup.
+  lifecycle {
+    ignore_changes = [ami]
   }
 }

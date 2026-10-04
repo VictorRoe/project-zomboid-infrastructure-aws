@@ -4,7 +4,7 @@ Sequences that span several files. Components are described in [architecture.md]
 
 ## 1. Provisioning (`terraform apply`)
 
-1. Terraform creates `pz-server-sg` and `PZ-Server-Instance` (Ubuntu AMI, 30 GB gp3 root).
+1. Terraform resolves the Ubuntu 24.04 AMI for `aws_region` (or uses `ami_id`), then creates `pz-server-sg` and `PZ-Server-Instance` (30 GB gp3 root). On later applies, image changes are ignored, so the instance is never replaced implicitly.
 2. cloud-init runs `user_data` as root: installs Ansible from its PPA, clones the GitHub repo into `/home/ubuntu/repo`, and runs the playbook as `ubuntu` against `localhost`.
 3. The playbook:
    1. Pre-tasks assert Debian x86_64, at least 2 vCPU and about 7.5 GB RAM, then validate the variables.

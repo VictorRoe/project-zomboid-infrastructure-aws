@@ -18,6 +18,14 @@ terraform apply
 terraform output -raw public_ip
 ```
 
+Offline test suite (no AWS credentials; the provider is mocked). Needs Terraform >= 1.9 (installed at `~/.local/bin/terraform` on this machine):
+
+```bash
+make test                                                     # all checks
+make tf-test                                                  # init + fmt -check + validate + terraform test
+terraform -chdir=terraform test -filter=tests/ami.tftest.hcl  # single suite
+```
+
 Ansible (validate locally without a target host):
 
 ```bash
@@ -43,9 +51,10 @@ Teardown with backup: `script/destroy-and-backup.sh`. It calls `terraform output
 
 ## Known inconsistencies to be aware of
 
+- `aws_instance.pz_server` ignores `ami` changes on purpose: the root disk is the world. Never remove that without a backup strategy.
+
 - `var.s3_bucket_name` (`zomboid-bucket-backup`) is unused; the script hardcodes `S3_BUCKET="tu-bucket-zomboid-backups"`.
 - The playbook's default `pz_admin_password` is a placeholder (`"test"`); the assert only rejects `CHANGE_ME_USE_ANSIBLE_VAULT`.
-- The AMI ID is hardcoded for `us-east-1`; changing `aws_region` requires changing the AMI.
 - No `key_name` is set on the instance, yet the backup script SSHes as `ubuntu`.
 - `pz_server_name` is hardcoded as `zomboid` in the backup script's service name.
 

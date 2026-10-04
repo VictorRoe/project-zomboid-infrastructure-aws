@@ -64,5 +64,5 @@ The game runs as the **systemd user service** `pzsvrtool@<name>.service` of `pzs
 | [#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1) | Snapshot is looked up but never used, so a new apply starts with an empty world |
 | [#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2) | Bucket name, region, and server name differ or are hardcoded between Terraform and the script |
 | [#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3) | Default admin password `test` passes validation |
-| [#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4) | The AMI ID only exists in us-east-1 |
+| ~~[#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)~~ | Fixed: the AMI is resolved per region (D10) |
 | [#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5) | No SSH key on the instance, but the backup script depends on SSH |
