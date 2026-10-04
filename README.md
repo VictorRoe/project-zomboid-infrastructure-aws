@@ -15,3 +15,4 @@ terraform output -raw public_ip     # connect to <ip>:16261
 - [Operations](docs/operations.md): day-to-day commands
 - [Decisions](docs/decisions.md): why things are the way they are
 - [Changelog](CHANGELOG.md)
+- [Specs](openspec/specs/): behavior contracts (OpenSpec); change history in `openspec/changes/archive/`

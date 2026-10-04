@@ -58,3 +58,5 @@ Newest entries go at the bottom. Each entry records what was decided, why, and t
 - The validation assert uses `quiet` instead of `no_log`, so its error message is visible.
 
 **D18. Playbook defaults moved to `playbook/vars/main.yml`, and validation and password logic to `playbook/tasks/`.** Why: the test playbook (`tests/ansible/`) loads the same defaults and tasks without root or a real host. Consequence: `vars_files` has the same precedence as the old inline `vars`, and `--extra-vars` still wins.
+
+**D19. OpenSpec lives in the repo, and the fixes ship as one PR.** `openspec/` moved from the parent working directory into the repo: main specs in `openspec/specs/`, the six archived changes in `openspec/changes/archive/2026-10-04-*`. The stacked branches (D8) are delivered as a single PR, `release/fix-issues-1-5`. Why: the maintainer asked for decisions, changes, specs and the changelog to be merged together, and specs should be version-controlled next to the code they describe. Consequence: every future change adds its OpenSpec artifacts to the PR.

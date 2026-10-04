@@ -61,7 +61,7 @@ Teardown with backup: `script/destroy-and-backup.sh` (any cwd; uses `terraform -
 
 ## Workflow
 
-The parent directory uses OpenSpec (`../openspec/`, `/opsx:*` commands) for spec-driven changes.
+Changes are spec-driven with OpenSpec (`/opsx:*` commands; the `.claude/` skills live in the parent directory). `openspec/specs/` holds the behavior contracts (capabilities: `compute-image-selection`, `world-data-restore`, `instance-access`, `world-backup`, `admin-credentials`); in-flight changes go in `openspec/changes/`, completed ones in `openspec/changes/archive/`. Validate with `openspec validate --all --strict`.
 
 ## Documentation rules
 

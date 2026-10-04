@@ -23,6 +23,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Terraform `>= 1.9` required; provider lock file is committed.
 
 ### Added
+- `openspec/`: behavior specs (5 capabilities) and the archived change proposals, designs and tasks for #1–#5.
 - `make ansible-test`: offline tests of password validation and generation.
 - `pz_server_name` Terraform variable (passed to the playbook) and outputs `backup_bucket_name`, `aws_region`, `pz_server_name`.
 - Optional SSH access: `ssh_public_key` or `ssh_key_name`, plus `ssh_allowed_cidrs` for port 22 ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).
