@@ -45,6 +45,56 @@ data "aws_ami" "ubuntu" {
 
 locals {
   base_ami_id = var.ami_id != "" ? var.ami_id : data.aws_ami.ubuntu.id
+
+  # Restore source: explicit snapshot > latest tagged snapshot > none.
+  latest_snapshot_id  = length(data.aws_ebs_snapshot.latest_zomboid_snapshot) > 0 ? data.aws_ebs_snapshot.latest_zomboid_snapshot[0].id : ""
+  restore_snapshot_id = !var.restore_from_snapshot ? "" : (var.restore_snapshot_id != "" ? var.restore_snapshot_id : local.latest_snapshot_id)
+  restoring           = local.restore_snapshot_id != ""
+
+  root_volume_size = local.restoring ? max(30, data.aws_ebs_snapshot.restore[0].volume_size) : 30
+  instance_ami_id  = local.restoring ? aws_ami.restored[0].id : local.base_ami_id
+
+  user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
+    repo_url    = "https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git"
+    repo_branch = "main"
+    repo_dir    = "/home/ubuntu/repo"
+  })
+}
+
+data "aws_ebs_snapshot" "restore" {
+  count        = local.restoring ? 1 : 0
+  owners       = ["self"]
+  snapshot_ids = [local.restore_snapshot_id]
+}
+
+# Image registered from the backup snapshot of the old root disk. Destroy
+# deregisters it; the snapshot itself is not managed and stays.
+resource "aws_ami" "restored" {
+  count               = local.restoring ? 1 : 0
+  name                = "pz-restore-${local.restore_snapshot_id}"
+  root_device_name    = "/dev/sda1"
+  virtualization_type = "hvm"
+  ena_support         = true
+  boot_mode           = "uefi-preferred"
+
+  ebs_block_device {
+    device_name           = "/dev/sda1"
+    snapshot_id           = local.restore_snapshot_id
+    volume_size           = local.root_volume_size
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
+  tags = {
+    Name = "pz-restore-${local.restore_snapshot_id}"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = data.aws_ebs_snapshot.restore[0].state == "completed"
+      error_message = "Snapshot ${local.restore_snapshot_id} is not completed yet; wait for it before restoring."
+    }
+  }
 }
 
 resource "aws_security_group" "pz_sg" {
@@ -82,13 +132,13 @@ resource "aws_security_group" "pz_sg" {
 
 # 5. Instancia EC2 con script de User Data
 resource "aws_instance" "pz_server" {
-  ami                    = local.base_ami_id
+  ami                    = local.instance_ami_id
   instance_type          = var.instance_type
   availability_zone      = var.availability_zone
   vpc_security_group_ids = [aws_security_group.pz_sg.id]
 
   root_block_device {
-    volume_size           = 30
+    volume_size           = local.root_volume_size
     volume_type           = "gp3"
     delete_on_termination = true
     tags = {
@@ -97,21 +147,7 @@ resource "aws_instance" "pz_server" {
   }
 
 
-  user_data = <<-EOF
-              #!/bin/bash
-              set -e
-
-              apt-get update -y
-              apt-get install -y python3-pip git software-properties-common
-              add-apt-repository --yes --update ppa:ansible/ansible
-              apt-get install -y ansible
-
-              mkdir -p /home/ubuntu/repo
-              git clone https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git /home/ubuntu/repo
-              chown -R ubuntu:ubuntu /home/ubuntu/repo
-
-              su - ubuntu -c "cd /home/ubuntu/repo/playbook && ansible-playbook -i inventory.ini project-zomboid-server-install.yml"
-              EOF
+  user_data = local.user_data
 
   tags = {
     Name = "PZ-Server-Instance"

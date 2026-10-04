@@ -30,3 +30,12 @@ Newest entries go at the bottom. Each entry records what was decided, why, and t
 - `.terraform.lock.hcl` is now committed.
 
 **D11. Offline test harness.** `make test` runs `terraform test` with `mock_provider "aws"`, `override_data` and the Ansible syntax check. Why: no AWS spend or credentials (D9). Consequence: the real AMI filter is only exercised on the first real apply.
+
+**D12. Restore by registering an image from the root snapshot ([#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)).** On create, `aws_ami.restored` is registered from the latest tagged snapshot (or `restore_snapshot_id`), and the instance boots from it. `restore_from_snapshot = false` opts out. Why: the backup is a full root-disk snapshot, and a root volume can only come from an image. A separate data volume would need a migration. Consequences:
+- Restore applies only on create (D10's `ignore_changes`), so a live server is never rolled back.
+- If a newer snapshot appears while the server runs, the next apply re-registers the image but leaves the instance alone.
+- Snapshots that aren't `completed` are rejected.
+- Destroy deregisters the image but keeps the snapshots.
+- The boot mode is set to `uefi-preferred` without testing on real AWS. Check it on the first real restore.
+
+**D13. The boot script is idempotent and lives in a template.** `user_data` moved to `terraform/templates/user_data.sh.tftpl`. When the checkout exists, it runs `git fetch`/`reset` as `ubuntu`. Why: cloud-init re-runs `user_data` on a restored disk, and root-run git rejects a repo owned by `ubuntu`. Consequence: local changes on the server's checkout are discarded at boot. `make user-data-check` validates the rendered script.

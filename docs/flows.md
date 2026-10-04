@@ -40,6 +40,13 @@ Run from `terraform/`.
 4. Archives `s3://<bucket>/latest/` to `archive/<date>/` and writes the snapshot ID to `latest/snapshot_meta.txt`.
 5. Runs `terraform destroy -auto-approve`, which deletes the instance and its disk. The snapshot remains.
 
-## 4. Restore
+## 4. Restore (`terraform apply` after a destroy)
 
-Not implemented yet. `main.tf` finds the latest snapshot but doesn't use it; see [#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1).
+1. Terraform picks the restore source: `restore_snapshot_id` if set, otherwise the latest owned snapshot tagged `pz-world-data-snapshot`. If `restore_from_snapshot = false`, there is no restore.
+2. It reads that snapshot. A precondition fails the run if the snapshot isn't `completed`.
+3. It registers the image `pz-restore-<snap>` (`/dev/sda1`, hvm, ENA, `uefi-preferred`, gp3, size `max(30, snapshot)`).
+4. The instance boots from that image, so world saves, the pzsvrtool config and the game install come back as they were.
+5. cloud-init runs `user_data` again (new instance ID). The repo already exists, so it runs `git fetch` and `reset --hard origin/main` as `ubuntu` instead of cloning. The playbook then re-runs idempotently: the game isn't reinstalled because `start-server.sh` exists.
+6. The `restored_from_snapshot_id` output shows the snapshot used (empty means a fresh install).
+
+Restore only happens when the instance is **created**. On a running server, a newer snapshot doesn't trigger a replacement because `ami` changes are ignored. `terraform destroy` deregisters the restore image; the snapshots stay.

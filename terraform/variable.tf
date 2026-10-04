@@ -32,3 +32,15 @@ variable "ami_id" {
   default     = ""
   description = "AMI explícita para la EC2; vacío = última Ubuntu 24.04 LTS de Canonical en aws_region"
 }
+
+variable "restore_from_snapshot" {
+  type        = bool
+  default     = true
+  description = "Al crear la EC2, restaurar el disco desde el último snapshot pz-world-data-snapshot si existe"
+}
+
+variable "restore_snapshot_id" {
+  type        = string
+  default     = ""
+  description = "Snapshot específico a restaurar; vacío = el último con tag pz-world-data-snapshot"
+}

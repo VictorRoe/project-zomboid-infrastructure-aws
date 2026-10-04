@@ -22,6 +22,17 @@ sudo -iu pzserver journalctl --user -u pz-auto-update.service
 sudo tail -f /var/log/cloud-init-output.log    # first-boot provisioning log
 ```
 
+## Restore
+
+```bash
+terraform apply                                          # restores from the latest pz-world-data-snapshot, if any
+terraform apply -var restore_snapshot_id=snap-0abc...    # restore a specific snapshot
+terraform apply -var restore_from_snapshot=false         # fresh world, ignore snapshots
+terraform output restored_from_snapshot_id
+```
+
+Old snapshots are kept and still cost money. Delete the ones you no longer need with `aws ec2 delete-snapshot`.
+
 ## Rebuild on a newer image
 
 Image changes are ignored on a running instance. To rebuild deliberately, take a backup first, because the root disk (the world) is deleted:
@@ -36,7 +47,8 @@ terraform apply -replace=aws_instance.pz_server
 make test             # everything below
 make tf-test          # terraform init/fmt/validate/test (mocked AWS provider)
 make ansible-check    # playbook syntax check
-terraform -chdir=terraform test -filter=tests/ami.tftest.hcl   # a single suite
+make user-data-check  # render the EC2 boot script, bash -n + shellcheck
+terraform -chdir=terraform test -filter=tests/restore.tftest.hcl   # a single suite
 ```
 
 Requires Terraform >= 1.9 and ansible-core. `terraform init` downloads the provider from the registry but never calls AWS.
