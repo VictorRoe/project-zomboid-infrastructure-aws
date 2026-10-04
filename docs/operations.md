@@ -4,12 +4,21 @@ Day-to-day commands. Values are listed in [spec.md](spec.md).
 
 ## Deploy and tear down
 
+SSH access, which the backup script needs, is set in `terraform.tfvars` (gitignored):
+
+```hcl
+ssh_public_key    = "ssh-ed25519 AAAA... you@host"   # or: ssh_key_name = "existing-pair"
+ssh_allowed_cidrs = ["203.0.113.4/32"]
+```
+
 ```bash
 cd terraform
 terraform init
 terraform apply                       # creates the server and bootstraps it via user_data
 terraform output -raw public_ip       # players connect to <ip>:16261
-../script/destroy-and-backup.sh       # snapshot + S3 metadata + terraform destroy (run from terraform/)
+../script/destroy-and-backup.sh       # stop, snapshot, S3 metadata, terraform destroy (run from terraform/)
+SSH_KEY=~/.ssh/pz ../script/destroy-and-backup.sh     # with a specific identity file
+FORCE_SNAPSHOT=1 ../script/destroy-and-backup.sh      # last resort: snapshot even if the stop can't be confirmed
 ```
 
 ## On the server
@@ -48,6 +57,7 @@ make test             # everything below
 make tf-test          # terraform init/fmt/validate/test (mocked AWS provider)
 make ansible-check    # playbook syntax check
 make user-data-check  # render the EC2 boot script, bash -n + shellcheck
+make script-test      # backup script against stubbed aws/ssh/terraform
 terraform -chdir=terraform test -filter=tests/restore.tftest.hcl   # a single suite
 ```
 

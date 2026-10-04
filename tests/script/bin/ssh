@@ -1,0 +1,12 @@
+#!/bin/bash
+# Stub: records argv; behaviour driven by STUB_* env vars.
+printf 'ssh %s\n' "$*" >> "$STUB_LOG"
+[ "${STUB_SSH_FAIL:-0}" = "1" ] && exit 255
+cmd="${*: -1}"
+if [[ "$cmd" == *pgrep* ]]; then
+  # STUB_PZ_RUNNING_POLLS: number of polls that still report "running".
+  n=$(cat "$STUB_DIR/polls" 2>/dev/null || echo 0)
+  echo $((n + 1)) > "$STUB_DIR/polls"
+  if [ "$n" -lt "${STUB_PZ_RUNNING_POLLS:-0}" ]; then echo running; else echo stopped; fi
+fi
+exit 0

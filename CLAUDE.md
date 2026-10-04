@@ -24,6 +24,7 @@ Offline test suite (no AWS credentials; the provider is mocked). Needs Terraform
 make test                                                     # all checks
 make tf-test                                                  # init + fmt -check + validate + terraform test
 make user-data-check                                          # render EC2 boot script, bash -n + shellcheck
+make script-test                                              # backup script vs stubbed aws/ssh/terraform (tests/script/bin)
 terraform -chdir=terraform test -filter=tests/ami.tftest.hcl  # single suite
 ```
 
@@ -48,18 +49,18 @@ Teardown with backup: `script/destroy-and-backup.sh`. It calls `terraform output
    - Writes `~pzserver/pzsvrtool/pzsvrtool.config` (no spaces or `=` allowed in the admin password — enforced by a pre-task assert).
    - Installs an embedded `pz-auto-update.sh` plus a user `.service`/`.timer` that polls Steam and only performs updates inside a configured time window (graceful countdown → wait for shutdown → backup → reinstall → verify buildid → restart, with recovery restart on failure).
    - Configures UFW last (SSH allowed before enabling). UFW ports must stay in sync with the Terraform security group.
-4. **Backup/restore**: `destroy-and-backup.sh` stops the service over SSH, snapshots the root volume, tags it `pz-world-data-snapshot`, writes the snapshot ID to S3, then `terraform destroy`. On the next create, `main.tf` registers an image (`aws_ami.restored`) from the latest tagged snapshot (or `restore_snapshot_id`) and boots from it; `restore_from_snapshot = false` opts out.
+4. **Backup/restore**: `destroy-and-backup.sh` stops the service over SSH (needs `ssh_public_key`/`ssh_key_name`; aborts unless the game process is confirmed gone), snapshots the root volume, tags it `pz-world-data-snapshot`, writes the snapshot ID to S3, then `terraform destroy`. On the next create, `main.tf` registers an image (`aws_ami.restored`) from the latest tagged snapshot (or `restore_snapshot_id`) and boots from it; `restore_from_snapshot = false` opts out.
 
 ## Invariants
 
 - `aws_instance.pz_server` ignores `ami` changes on purpose: the root disk is the world, so neither a newer Ubuntu image nor a newer snapshot may replace a running server. Never remove that without a backup strategy.
+- The backup script must never snapshot without a confirmed stop; new AWS/SSH/Terraform calls in it need matching behaviour in `tests/script/bin` stubs.
 - Terraform tests mock AWS; a mocked `aws_ebs_snapshot_ids` returns no IDs, so tests needing a snapshot must `override_data` every snapshot data source by full address (see `terraform/tests/restore.tftest.hcl`).
 
 ## Known inconsistencies to be aware of
 
 - `var.s3_bucket_name` (`zomboid-bucket-backup`) is unused; the script hardcodes `S3_BUCKET="tu-bucket-zomboid-backups"`.
 - The playbook's default `pz_admin_password` is a placeholder (`"test"`); the assert only rejects `CHANGE_ME_USE_ANSIBLE_VAULT`.
-- No `key_name` is set on the instance, yet the backup script SSHes as `ubuntu`.
 - `pz_server_name` is hardcoded as `zomboid` in the backup script's service name.
 
 ## Workflow

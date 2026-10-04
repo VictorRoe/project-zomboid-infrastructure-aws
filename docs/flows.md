@@ -35,7 +35,10 @@ The timer fires 10 minutes after boot, then every `pz_update_check_minutes`. The
 Run from `terraform/`.
 
 1. Reads `public_ip` from Terraform and finds the volume by tag `pz-world-data-root`.
-2. Stops the server over SSH. Failures are ignored (`|| true`); see [#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5).
+2. Stops the server over SSH (`SSH_KEY` optional):
+   1. Runs `systemctl --user stop pzsvrtool@zomboid.service` as `pzserver`, with the user bus environment set on the server side.
+   2. Polls `pgrep ProjectZomboid` until the process is gone (`STOP_TIMEOUT`, default 600 s).
+   3. If SSH fails, the stop fails or the timeout passes, the script **aborts with exit 1**, before any snapshot or destroy. `FORCE_SNAPSHOT=1` continues anyway with a warning.
 3. Creates an EBS snapshot tagged `pz-world-data-snapshot` and waits for it to complete.
 4. Archives `s3://<bucket>/latest/` to `archive/<date>/` and writes the snapshot ID to `latest/snapshot_meta.txt`.
 5. Runs `terraform destroy -auto-approve`, which deletes the instance and its disk. The snapshot remains.

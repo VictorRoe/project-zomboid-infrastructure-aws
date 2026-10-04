@@ -44,3 +44,26 @@ variable "restore_snapshot_id" {
   default     = ""
   description = "Snapshot específico a restaurar; vacío = el último con tag pz-world-data-snapshot"
 }
+
+variable "ssh_public_key" {
+  type        = string
+  default     = ""
+  description = "Clave pública SSH; si se define, se crea el key pair pz-server y se asocia a la EC2"
+}
+
+variable "ssh_key_name" {
+  type        = string
+  default     = ""
+  description = "Nombre de un key pair existente en AWS para la EC2 (excluyente con ssh_public_key)"
+
+  validation {
+    condition     = !(var.ssh_key_name != "" && var.ssh_public_key != "")
+    error_message = "Set either ssh_public_key or ssh_key_name, not both."
+  }
+}
+
+variable "ssh_allowed_cidrs" {
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+  description = "CIDRs autorizados a conectarse por SSH (puerto 22)"
+}

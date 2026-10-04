@@ -39,3 +39,10 @@ Newest entries go at the bottom. Each entry records what was decided, why, and t
 - The boot mode is set to `uefi-preferred` without testing on real AWS. Check it on the first real restore.
 
 **D13. The boot script is idempotent and lives in a template.** `user_data` moved to `terraform/templates/user_data.sh.tftpl`. When the checkout exists, it runs `git fetch`/`reset` as `ubuntu`. Why: cloud-init re-runs `user_data` on a restored disk, and root-run git rejects a repo owned by `ubuntu`. Consequence: local changes on the server's checkout are discarded at boot. `make user-data-check` validates the rendered script.
+
+**D14. Optional SSH key pair, and no snapshot of a running server ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).** Either `ssh_public_key` (creates key pair `pz-server`) or `ssh_key_name` can be set, never both. `ssh_allowed_cidrs` limits port 22. The backup script stops the service with the user bus environment, waits for the process to exit, and otherwise aborts before snapshotting. `FORCE_SNAPSHOT=1` is the escape hatch. Why: the instance had no key, the masked SSH failure snapshotted a live server, and `sudo -iu … systemctl --user` can't reach the user bus anyway. Consequences:
+- **Behavior change:** backups now fail loudly instead of continuing.
+- Host keys aren't pinned, because cloud-init regenerates them on every instance.
+- SSM Session Manager is a possible follow-up; it needs an IAM role.
+
+**D15. Script tests use PATH stubs rather than bats.** `tests/script/bin/{aws,ssh,terraform}` record their calls and follow `STUB_*` variables. Why: no extra dependency, and nothing touches AWS. Consequence: the stubs must follow any new CLI calls the script makes.

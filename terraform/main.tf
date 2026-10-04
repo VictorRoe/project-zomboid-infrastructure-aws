@@ -54,6 +54,8 @@ locals {
   root_volume_size = local.restoring ? max(30, data.aws_ebs_snapshot.restore[0].volume_size) : 30
   instance_ami_id  = local.restoring ? aws_ami.restored[0].id : local.base_ami_id
 
+  key_name = length(aws_key_pair.pz) > 0 ? aws_key_pair.pz[0].key_name : (var.ssh_key_name != "" ? var.ssh_key_name : null)
+
   user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
     repo_url    = "https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git"
     repo_branch = "main"
@@ -97,6 +99,12 @@ resource "aws_ami" "restored" {
   }
 }
 
+resource "aws_key_pair" "pz" {
+  count      = var.ssh_public_key != "" ? 1 : 0
+  key_name   = "pz-server"
+  public_key = var.ssh_public_key
+}
+
 resource "aws_security_group" "pz_sg" {
   name        = "pz-server-sg"
   description = "Puertos requeridos para Project Zomboid"
@@ -119,7 +127,7 @@ resource "aws_security_group" "pz_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.ssh_allowed_cidrs
   }
 
   egress {
@@ -136,6 +144,7 @@ resource "aws_instance" "pz_server" {
   instance_type          = var.instance_type
   availability_zone      = var.availability_zone
   vpc_security_group_ids = [aws_security_group.pz_sg.id]
+  key_name               = local.key_name
 
   root_block_device {
     volume_size           = local.root_volume_size

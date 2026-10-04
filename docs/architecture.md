@@ -19,7 +19,7 @@ There is no remote state, CI, or image pipeline. Terraform state is local to the
  Operator machine                           AWS (aws_region)
 ┌──────────────────────┐        ┌──────────────────────────────────────────────┐
 │ terraform apply      │──────▶ │ Security group pz-server-sg                  │
-│                      │        │  UDP 16261-16262, 8766 · TCP 22 (0.0.0.0/0)  │
+│                      │        │  UDP 16261-16262, 8766 · TCP 22 (ssh CIDRs)  │
 │ destroy-and-backup.sh│        │                                              │
 │  ├─ terraform output │        │ EC2 PZ-Server-Instance (Ubuntu, t3.large)    │
 │  ├─ ssh ubuntu@ip ───┼──────▶ │  root gp3 30 GB, tag pz-world-data-root      │
@@ -65,4 +65,4 @@ The game runs as the **systemd user service** `pzsvrtool@<name>.service` of `pzs
 | [#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2) | Bucket name, region, and server name differ or are hardcoded between Terraform and the script |
 | [#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3) | Default admin password `test` passes validation |
 | ~~[#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)~~ | Fixed: the AMI is resolved per region (D10) |
-| [#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5) | No SSH key on the instance, but the backup script depends on SSH |
+| ~~[#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)~~ | Fixed: optional key pair; the backup aborts unless the stop is confirmed (D14) |
