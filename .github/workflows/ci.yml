@@ -1,6 +1,8 @@
 name: "CI Terraform"
 
 on:
+  push:
+    branches: ["main", "release/**", "fix/**", "feature/**"]
   pull_request:
     branches: ["main", "release/**", "fix/**", "feature/**"]
 
