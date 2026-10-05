@@ -36,3 +36,10 @@ El procedimiento de respaldo DEBE (SHALL) salir con código distinto de cero ant
 #### Scenario: Sin bucket configurado
 - **WHEN** el bucket se resuelve a un valor vacío
 - **THEN** el script sale con código distinto de cero y no realiza llamadas SSH ni a AWS
+
+### Requirement: Puerto SSH configurable
+El procedimiento de backup DEBE (SHALL) usar el puerto SSH indicado en `SSH_PORT`, o el 22 si no está definido.
+
+#### Scenario: Puerto personalizado
+- **WHEN** se ejecuta con `SSH_PORT=2222`
+- **THEN** todas las conexiones SSH usan el puerto 2222

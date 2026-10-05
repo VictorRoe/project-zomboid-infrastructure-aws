@@ -9,6 +9,7 @@ Cómo encajan las piezas de este repo. Los valores actuales están en [spec.md](
 | Terraform | `terraform/` | Recursos de AWS: un security group y una instancia EC2 con un único disco raíz gp3 |
 | Arranque | `terraform/templates/user_data.sh.tftpl` | Instala Ansible, clona este repo desde GitHub (o lo actualiza, en un disco restaurado) y ejecuta el playbook en la propia instancia |
 | Ansible | `playbook/` | Configuración del host: usuario `pzserver`, swap, pzsvrtool, instalación del juego, servicios systemd de usuario, timer de actualización automática, UFW |
+| Prueba local | `local/vm.sh` | VM QEMU/KVM con la misma imagen y el mismo `user_data` que la EC2, para probar sin AWS |
 | Backup/baja | `script/destroy-and-backup.sh` | Corre en la máquina del operador: detener el servidor → snapshot del disco raíz → registro en S3 → `terraform destroy` |
 
 No hay estado remoto, CI ni pipeline de imágenes. El estado de Terraform es local, en el checkout del operador.
@@ -81,4 +82,11 @@ El juego corre como **servicio systemd de usuario** `pzsvrtool@<nombre>.service`
 | [#10](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/10) | No hay backups mientras el servidor corre; los snapshots no tienen retención (DLM) | 3 |
 | [#13](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/13) | Sin contraseña de ingreso ni whitelist: cualquiera con la IP puede entrar | 4 |
 | [#11](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/11) | `sa-east-1` daría ~40 ms desde Argentina contra ~130–150 ms en `us-east-1` | — |
-| [#12](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/12) | Endurecimiento: backend remoto, bucket S3 redundante, versión fija del repo, SSH restringido | — |
+| [#12](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/12) | Endurecimiento: backend remoto, bucket S3 redundante, versión fija del repo (ya configurable con `repo_branch`), SSH restringido | — |
+
+### Resueltos con la prueba en VM local (2026-10-05)
+
+| Issue | Resumen |
+|---|---|
+| ~~[#14](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/14)~~ | Pruebas locales con una VM que imita la EC2 (D23) |
+| ~~[#15](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/15)~~ | La instalación del juego fallaba en silencio por el directorio de trabajo de pzsvrtool (D24) |

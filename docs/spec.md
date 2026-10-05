@@ -15,6 +15,7 @@ Estado objetivo actual del stack. Actualizar este archivo con cada cambio y regi
 | Backups | Snapshots EBS con tag `pz-world-data-snapshot`; bucket S3 `s3_bucket_name` = `zomboid-bucket-backup`. Tiene que existir de antemano y este stack no lo gestiona |
 | Restauración | Al crear la instancia, si `restore_from_snapshot` (por defecto `true`) y existe un snapshot: registra la imagen `pz-restore-<snap>` desde el último snapshot con tag (o `restore_snapshot_id`) y arranca desde ella; tamaño raíz `max(30, tamaño del snapshot)`; el snapshot tiene que estar `completed` |
 | Nombre del servidor | `pz_server_name` = `zomboid` (regex `^[A-Za-z0-9._-]+$`), se pasa al playbook vía `user_data` (`-e pz_server_name=`) |
+| Origen del arranque | `repo_url` (repo de GitHub del proyecto) y `repo_branch` (`main`), validados; el `user_data` clona/actualiza esa rama |
 | Outputs | `public_ip`, `root_volume_id`, `restored_from_snapshot_id`, `backup_bucket_name`, `aws_region`, `pz_server_name` |
 | Estado | Local, sin backend |
 | Herramientas | Terraform `>= 1.9`, provider de AWS `~> 6.0`, lock file commiteado |
@@ -29,6 +30,10 @@ Estado objetivo actual del stack. Actualizar este archivo con cada cambio y regi
 - `make ansible-check`: chequeo de sintaxis del playbook.
 - `make ansible-test`: `tests/ansible/run.sh` (validación y generación de la contraseña en localhost).
 
+## Pruebas locales con VM (sin AWS)
+
+`local/vm.sh` (targets `make local-*`) levanta con QEMU/KVM la imagen cloud oficial de Ubuntu 24.04 (verificada con `SHA256SUMS`) y le pasa por cloud-init NoCloud el `user_data` renderizado por Terraform, sin cambios, más la clave SSH. VM de 4 vCPU y 10 GB; puertos reenviados a `127.0.0.1`: SSH 2222, UDP 16261, 16262 y 8766. Estado en `.local-vm/` (ignorado por git). Pruebas: `check` (11 chequeos), `reboot-test`, `backup-test` (script real con SSH real; `aws`/`terraform` simulados) y `restore-test` (copia del disco + `instance-id` nuevo). Detalle en [operations.md](operations.md#pruebas-locales-con-una-vm-sin-aws).
+
 ## Script de backup
 
 | Ítem | Valor |
@@ -36,10 +41,10 @@ Estado objetivo actual del stack. Actualizar este archivo con cada cambio y regi
 | Configuración | Sale de los outputs de Terraform (`terraform -chdir=<repo>/terraform`); `S3_BUCKET`, `AWS_REGION`, `PZ_SERVER_NAME` y `TF_DIR` la reemplazan. Falla antes de cualquier acción si falta un valor |
 | Disco | Output `root_volume_id` |
 | Metadatos | `s3://<bucket>/latest/snapshot_meta.txt` (el `latest/` anterior se copia a `archive/<fecha>/`) |
-| Detención | `systemctl --user stop pzsvrtool@<pz_server_name>.service` como `pzserver` con `XDG_RUNTIME_DIR`; después consulta hasta que no quede proceso `ProjectZomboid` |
+| Detención | `systemctl --user stop pzsvrtool@<pz_server_name>.service` como `pzserver` con `XDG_RUNTIME_DIR`; el `ExecStop` de pzsvrtool avisa "Unplanned shutdown", hace una cuenta regresiva de 3 min y guarda (si no termina en 2 min más, `kill -9`). Después consulta hasta que no quede proceso `ProjectZomboid` |
 | Tiempo de espera | `STOP_TIMEOUT` = 600 s; consulta cada `POLL_INTERVAL` = 5 s |
 | Si falla | Aborta antes del snapshot (exit 1). `FORCE_SNAPSHOT=1` sigue con una advertencia |
-| SSH | `ubuntu@<public_ip>`, archivo de identidad `SSH_KEY`, `BatchMode`, sin fijar la host key |
+| SSH | `ubuntu@<public_ip>`, puerto `SSH_PORT` (22), archivo de identidad `SSH_KEY`, `BatchMode`, sin fijar la host key |
 
 ## Host (Ansible)
 

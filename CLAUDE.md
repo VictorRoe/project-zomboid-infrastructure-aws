@@ -29,6 +29,15 @@ make ansible-test                                             # validación/gene
 terraform -chdir=terraform test -filter=tests/ami.tftest.hcl  # una sola suite
 ```
 
+Pruebas de integración en una VM local (QEMU/KVM, sin AWS; la rama actual tiene que estar pusheada porque la VM la clona desde GitHub):
+
+```bash
+make local-test        # clean previo recomendado: local-up + reboot + backup + restore (~10 min)
+make local-up          # aprovisiona y corre check (11 chequeos)
+local/vm.sh ssh '<cmd>'  # comandos en la VM
+make local-down        # apaga; make local-clean borra discos y claves
+```
+
 Ansible (validar localmente sin host destino):
 
 ```bash
@@ -57,11 +66,12 @@ Baja con backup: `script/destroy-and-backup.sh` (desde cualquier directorio; usa
 - La configuración fluye variables de Terraform → outputs → script de backup, y → `user_data` → playbook (`pz_server_name`). No hardcodear bucket/región/nombre del servidor en otro lado. El bucket S3 no lo gestiona este stack a propósito.
 - `aws_instance.pz_server` ignora los cambios de `ami` a propósito: el disco raíz es el mundo, así que ni una imagen de Ubuntu más nueva ni un snapshot más nuevo pueden reemplazar un servidor en marcha. Nunca quitarlo sin una estrategia de backup.
 - El script de backup nunca debe hacer snapshot sin una detención confirmada; toda llamada nueva a AWS/SSH/Terraform en él necesita su comportamiento en los stubs de `tests/script/bin`.
+- pzsvrtool trabaja en el directorio actual e imprime "Installation Completed" aunque falle: las tareas que lo invocan con `runuser` necesitan `chdir: "{{ pz_home }}"` y una verificación posterior (D24).
 - Los tests de Terraform simulan AWS; un `aws_ebs_snapshot_ids` simulado no devuelve IDs, así que los tests que necesitan un snapshot tienen que hacer `override_data` de cada data source de snapshot por dirección completa (ver `terraform/tests/restore.tftest.hcl`).
 
 ## Flujo de trabajo
 
-Los cambios se hacen guiados por specs con OpenSpec (comandos `/opsx:*`; las skills de `.claude/` están en el directorio padre). `openspec/specs/` contiene los contratos de comportamiento (capacidades: `compute-image-selection`, `world-data-restore`, `instance-access`, `world-backup`, `admin-credentials`); los cambios en curso van en `openspec/changes/` y los terminados en `openspec/changes/archive/`. Validar con `openspec validate --all --strict`. `openspec/config.yaml` fija el idioma (castellano) y las reglas de tests offline.
+Los cambios se hacen guiados por specs con OpenSpec (comandos `/opsx:*`; las skills de `.claude/` están en el directorio padre). `openspec/specs/` contiene los contratos de comportamiento (capacidades: `compute-image-selection`, `world-data-restore`, `instance-access`, `world-backup`, `admin-credentials`, `server-bootstrap`, `local-integration-testing`); los cambios en curso van en `openspec/changes/` y los terminados en `openspec/changes/archive/`. Validar con `openspec validate --all --strict`. `openspec/config.yaml` fija el idioma (castellano) y las reglas de tests offline.
 
 Los problemas abiertos (#7–#13) están listados con prioridad en `docs/architecture.md`; cada uno se trabaja como un cambio de OpenSpec propio.
 

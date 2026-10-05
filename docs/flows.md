@@ -5,12 +5,12 @@ Secuencias que atraviesan varios archivos. Los componentes se describen en [arch
 ## 1. Aprovisionamiento (`terraform apply`)
 
 1. Terraform resuelve la AMI de Ubuntu 24.04 para `aws_region` (o usa `ami_id`) y crea `pz-server-sg` y `PZ-Server-Instance` (raíz gp3 de 30 GB). En applies posteriores los cambios de imagen se ignoran, así que la instancia nunca se reemplaza implícitamente.
-2. cloud-init ejecuta `user_data` como root: instala Ansible desde su PPA, clona el repo de GitHub en `/home/ubuntu/repo` y corre el playbook como `ubuntu` contra `localhost` con `-e pz_server_name=<var>`.
+2. cloud-init ejecuta `user_data` como root: instala Ansible desde su PPA, clona el repo `repo_url` (rama `repo_branch`) en `/home/ubuntu/repo` y corre el playbook como `ubuntu` contra `localhost` con `-e pz_server_name=<var>`.
 3. El playbook:
    1. En las pre-tasks verifica Debian x86_64, al menos 2 vCPU y unos 7,5 GB de RAM, y después valida las variables (`tasks/validate.yml`). Una contraseña de admin provista tiene que cumplir las reglas de fortaleza.
    2. Instala paquetes, crea `pzserver` y crea y activa el archivo de swap.
    3. Activa linger, le da `TimeoutStopSec=20m` al gestor de usuario e instala pzsvrtool (`.deb` con versión fija).
-   4. Resuelve la contraseña de admin (`tasks/admin_password.yml`): si se proveyó una, la guarda; si no, reutiliza la guardada o genera una aleatoria y la guarda en `.admin_password` (0600). Después escribe `pzsvrtool.config` e instala el juego con `pzsvrtool install`. Si todavía falta `start-server.sh`, recurre directamente a SteamCMD.
+   4. Resuelve la contraseña de admin (`tasks/admin_password.yml`): si se proveyó una, la guarda; si no, reutiliza la guardada o genera una aleatoria y la guarda en `.admin_password` (0600). Después escribe `pzsvrtool.config` e instala el juego con `pzsvrtool install`, con el home de `pzserver` como directorio de trabajo (pzsvrtool descarga SteamCMD ahí). Si todavía falta `start-server.sh`, recurre directamente a SteamCMD, y si sigue faltando, falla con un mensaje claro. El primer arranque crea la cuenta `pzadmin` con esa contraseña.
    5. Habilita e inicia `pzsvrtool@<nombre>.service` y espera al proceso `ProjectZomboid`.
    6. Instala el script, el servicio y el timer de actualización automática.
    7. Configura UFW: primero SSH, después los puertos UDP del juego, y por último activa el firewall.
@@ -53,3 +53,12 @@ Se puede ejecutar desde cualquier directorio.
 6. El output `restored_from_snapshot_id` muestra el snapshot usado (vacío significa instalación nueva).
 
 La restauración solo ocurre cuando la instancia se **crea**. En un servidor que está corriendo, un snapshot más nuevo no provoca un reemplazo, porque los cambios de `ami` se ignoran. `terraform destroy` desregistra la imagen de restauración; los snapshots quedan.
+
+## 5. Prueba local con VM (`make local-test`)
+
+1. `local/vm.sh up` descarga la imagen cloud de Ubuntu 24.04, la verifica contra `SHA256SUMS`, renderiza el `user_data` con `repo_branch` = rama actual (tiene que estar pusheada) y arma un seed NoCloud: una parte cloud-config con la clave SSH (lo que en AWS hacen los metadatos) y el `user_data` tal cual.
+2. Arranca la VM con QEMU/KVM sobre un overlay qcow2 y espera a `cloud-init status --wait`: corre el mismo flujo 1 de arriba.
+3. `check` verifica servicio, proceso, puerto 16261/udp, linger, timer, contraseña y UFW.
+4. `reboot-test` reinicia, compara el `boot_id` y verifica que el juego vuelve solo.
+5. `backup-test` corre `script/destroy-and-backup.sh` con SSH real contra la VM y `aws`/`terraform` simulados: verifica la detención ordenada antes del snapshot simulado y vuelve a iniciar con `systemctl --user start`.
+6. `restore-test` apaga la VM, copia el disco y arranca con otro `instance-id`: cloud-init vuelve a ejecutar `user_data` (flujo 4, paso 5) y se verifica que los datos, la partida y la contraseña siguen.

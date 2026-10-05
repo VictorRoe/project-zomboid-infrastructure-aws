@@ -12,4 +12,4 @@
 
 ## 3. Docs y changelog
 
-- [ ] 3.1 Documentar en `docs/operations.md` (pruebas locales), `docs/spec.md` y `docs/flows.md`; agregar decisión en `docs/decisions.md` con los resultados reales, y entrada en `CHANGELOG.md`; verificar links y que los comandos documentados coincidan con el `Makefile`
+- [x] 3.1 Documentar en `docs/operations.md` (pruebas locales), `docs/spec.md` y `docs/flows.md`; agregar decisión en `docs/decisions.md` con los resultados reales, y entrada en `CHANGELOG.md`; verificar links y que los comandos documentados coincidan con el `Makefile`

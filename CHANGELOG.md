@@ -9,6 +9,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - Ya no existe la contraseña de admin por defecto `test`: si no se provee una, se genera en el host una contraseña aleatoria de 32 caracteres y se guarda en `/home/pzserver/pzsvrtool/.admin_password` (0600). Una contraseña provista tiene que tener al menos 12 caracteres, no ser un valor débil conocido y no contener espacios ni `=` ([#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)).
 
 ### Corregido
+- La instalación del juego fallaba en silencio: pzsvrtool descargaba SteamCMD en un directorio sin permisos para `pzserver`, imprimía "Installation Completed" igual y el aprovisionamiento no terminaba. Ahora corre con el home de `pzserver` como directorio de trabajo y se verifica que el juego quedó instalado ([#15](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/15)).
 - `docs/operations.md` y el mensaje final del playbook recomendaban `sudo -iu pzserver systemctl --user`, que puede no llegar al bus de usuario; ahora usan `XDG_RUNTIME_DIR` explícito. Se agregaron los comandos para iniciar, detener y reiniciar el servidor a mano.
 - La configuración del backup es consistente: `destroy-and-backup.sh` lee bucket, región, nombre del servidor, IP y volumen raíz de los outputs de Terraform (reemplazables con `S3_BUCKET`, `AWS_REGION`, `PZ_SERVER_NAME`, `TF_DIR`), funciona desde cualquier directorio, hace snapshot del `root_volume_id` exacto y falla temprano si falta un valor ([#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)).
 - `destroy-and-backup.sh` ahora detiene el servidor con el entorno correcto del bus de usuario de systemd, espera a que termine el proceso del juego y aborta antes del snapshot si no puede confirmarlo (`FORCE_SNAPSHOT=1` lo fuerza) ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).
@@ -25,7 +26,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - Se requiere Terraform `>= 1.9`; el lock file de providers se commitea.
 
 ### Agregado
-- `openspec/`: specs de comportamiento (5 capacidades) y las propuestas, diseños y tareas archivados de #1–#5.
+- Pruebas locales con una VM QEMU/KVM que imita la EC2 (`make local-up`, `local-check`, `local-reboot-test`, `local-backup-test`, `local-restore-test`, `local-test`), sin AWS ([#14](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/14)).
+- Variables de Terraform `repo_url` y `repo_branch` para elegir qué rama clona la instancia; `SSH_PORT` en el script de backup.
+- `openspec/`: specs de comportamiento (7 capacidades) y las propuestas, diseños y tareas archivados de #1–#5 y #14.
 - `make ansible-test`: tests offline de validación y generación de la contraseña.
 - Variable de Terraform `pz_server_name` (se pasa al playbook) y outputs `backup_bucket_name`, `aws_region`, `pz_server_name`.
 - Acceso SSH opcional: `ssh_public_key` o `ssh_key_name`, y `ssh_allowed_cidrs` para el puerto 22 ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).
