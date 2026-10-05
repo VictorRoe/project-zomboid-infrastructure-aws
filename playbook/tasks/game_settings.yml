@@ -1,0 +1,93 @@
+---
+# Heap de Java, contraseña de ingreso y configuración del servidor. Si algo tiene que
+# cambiar con el juego corriendo, se lo detiene en orden, se aplica todo junto y el
+# playbook lo vuelve a iniciar después. Los tests (tests/ansible) lo corren sin root
+# con pz_as_user = [] y pz_manage_service = false.
+- name: Install heap and configuration helpers
+  ansible.builtin.copy:
+    src: "{{ pz_files_dir }}/{{ item }}"
+    dest: "{{ pz_helper_dir }}/{{ item }}"
+    owner: "{{ pz_user }}"
+    group: "{{ pz_user }}"
+    mode: "0755"
+  loop:
+    - pz-set-heap.py
+    - pz-config-render.py
+
+- name: Resolve join password (supplied or generated, persisted)
+  ansible.builtin.import_tasks: join_password.yml
+
+- name: Check Java heap in ProjectZomboid64.json
+  ansible.builtin.command:
+    argv: >-
+      {{ pz_as_user + ['python3', pz_helper_dir ~ '/pz-set-heap.py', '--check',
+                       pz_home ~ '/pzserver/ProjectZomboid64.json', pz_java_xmx_mb | string] }}
+  register: pz_heap_check
+  changed_when: false
+
+- name: Plan server configuration
+  ansible.builtin.import_tasks: server_config_plan.yml
+
+- name: Create server configuration directory
+  ansible.builtin.file:
+    path: "{{ pz_server_config_dir }}"
+    state: directory
+    owner: "{{ pz_user }}"
+    group: "{{ pz_user }}"
+    mode: "0755"
+
+# Sin configuración subida: el .ini (si el juego todavía no lo creó, uno mínimo que PZ
+# completa al arrancar) igual lleva la contraseña antes de admitir jugadores.
+- name: Check join password in the server ini
+  ansible.builtin.lineinfile:
+    path: "{{ pz_server_config_dir }}/{{ pz_server_name }}.ini"
+    regexp: "^Password="
+    line: "Password={{ pz_join_password_effective }}"
+    create: true
+    owner: "{{ pz_user }}"
+    group: "{{ pz_user }}"
+    mode: "0600"
+  check_mode: true
+  register: pz_join_ini_check
+  when: not pz_config_staged | bool
+  no_log: true
+
+- name: Decide whether the game has to stop
+  ansible.builtin.set_fact:
+    pz_needs_stop: >-
+      {{ pz_heap_check.stdout == 'changed'
+         or pz_config_needs_apply | bool
+         or (pz_join_ini_check.changed | default(false)) }}
+
+- name: Stop the game before applying changes
+  ansible.builtin.include_tasks: stop_game.yml
+  when: pz_needs_stop | bool and pz_manage_service | bool
+
+- name: Set Java heap in ProjectZomboid64.json
+  ansible.builtin.command:
+    argv: >-
+      {{ pz_as_user + ['python3', pz_helper_dir ~ '/pz-set-heap.py',
+                       pz_home ~ '/pzserver/ProjectZomboid64.json', pz_java_xmx_mb | string] }}
+  register: pz_heap_set
+  changed_when: pz_heap_set.stdout == 'changed'
+  when: pz_heap_check.stdout == 'changed'
+
+- name: Apply server configuration
+  ansible.builtin.include_tasks: server_config_apply.yml
+  when: pz_config_needs_apply | bool
+
+- name: Report manual changes to the server configuration
+  ansible.builtin.include_tasks: server_config_drift.yml
+  when: pz_config_staged | bool and not pz_config_needs_apply | bool
+
+- name: Set join password in the server ini
+  ansible.builtin.lineinfile:
+    path: "{{ pz_server_config_dir }}/{{ pz_server_name }}.ini"
+    regexp: "^Password="
+    line: "Password={{ pz_join_password_effective }}"
+    create: true
+    owner: "{{ pz_user }}"
+    group: "{{ pz_user }}"
+    mode: "0600"
+  when: not pz_config_staged | bool
+  no_log: true

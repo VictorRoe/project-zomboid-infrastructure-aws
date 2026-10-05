@@ -11,6 +11,9 @@ pzsvrtool_version: "1.7.3"
 pzsvrtool_deb_url: >-
   https://github.com/Lu5ck/pzsvrtool/releases/download/{{ pzsvrtool_version }}/pzsvrtool.x86_64.deb
 pzsvrtool_deb_path: "/tmp/pzsvrtool-{{ pzsvrtool_version }}.deb"
+# Con el checksum, un .deb ya descargado no se vuelve a pedir (reaprovisionar no depende de
+# GitHub) y uno alterado se rechaza. Actualizarlo junto con pzsvrtool_version.
+pzsvrtool_deb_sha256: "175744fdd3004bf1992419f593bbbb91ee83aaded798078b5e7f40f9e8238d62"
 
 # -------------------------------------------------------------------------
 # Project Zomboid
@@ -37,8 +40,20 @@ pz_admin_password_denylist:
   - pzadmin
   - CHANGE_ME_USE_ANSIBLE_VAULT
 
-# El heap de Java del juego lo controla ProjectZomboid64.json; el margen del host
-# sale de la RAM de la VM más swap en lugar de subir -Xmx.
+# Contraseña de ingreso de los jugadores (Password= del .ini), distinta de la de admin.
+# Vacía = generar una aleatoria (24 caracteres) la primera vez y guardarla en
+# pz_join_password_file. pz_join_password_rotate=true genera una nueva (reinicia el juego).
+pz_join_password: ""
+pz_join_password_file: "{{ pz_home }}/pzsvrtool/.join_password"
+pz_join_password_rotate: false
+
+# Heap máximo de Java (-Xmx, MiB) que se escribe en ProjectZomboid64.json (también tras
+# cada actualización). Terraform pasa su valor. La RAM mínima utilizable del host es
+# heap + margen (SO, memoria nativa de Java, pzsvrtool); la swap no cuenta.
+pz_java_xmx_mb: 5632
+pz_host_overhead_mb: 1536
+
+# Swap de emergencia: no reemplaza RAM.
 pz_swap_file: /swapfile
 pz_swap_size_gb: 2
 
@@ -47,6 +62,15 @@ pz_shutdown_countdown_minutes: 5
 pz_backup_enabled: true
 pz_backup_limit: 10
 pz_discord_webhook: ""
+
+# -------------------------------------------------------------------------
+# Snapshots automáticos del disco (los hace la instancia; Terraform pasa los valores)
+# -------------------------------------------------------------------------
+pz_auto_snapshot_enabled: false
+pz_snapshot_time_utc: "09:00"
+pz_snapshot_retain: 4
+# Evita un segundo snapshot si el timer corre al prender poco después del último.
+pz_snapshot_min_hours: 12
 
 # -------------------------------------------------------------------------
 # Firewall
@@ -82,6 +106,27 @@ pz_update_shutdown_timeout_minutes: 20
 # -------------------------------------------------------------------------
 # Requisitos básicos del host
 # -------------------------------------------------------------------------
-# 7500 MB deja margen bajo la t3.large por defecto (8 GiB), que informa ~7,7 GiB de RAM utilizable.
-pz_min_ram_mb: 7500
+pz_min_ram_mb: "{{ (pz_java_xmx_mb | int) + (pz_host_overhead_mb | int) }}"
 pz_min_vcpus: 2
+
+# -------------------------------------------------------------------------
+# Configuración del servidor (ini, SandboxVars, spawns), subida por el operador
+# -------------------------------------------------------------------------
+# true = no iniciar el juego hasta tener configuración (Terraform pasa true por defecto):
+# el primer arranque crea el mundo con el Map= que haya, así que tiene que ser el correcto.
+pz_wait_for_config: false
+pz_helper_dir: "{{ pz_home }}/pzsvrtool"
+pz_files_dir: "{{ playbook_dir }}/files"
+# Prefijo para correr los helpers como pz_user (los tests lo dejan vacío).
+pz_as_user: ["runuser", "-u", "{{ pz_user }}", "--"]
+pz_server_config_dir: "{{ pz_home }}/Zomboid/Server"
+pz_world_dir: "{{ pz_home }}/Zomboid/Saves/Multiplayer/{{ pz_server_name }}"
+pz_config_stage_dir: "{{ pz_home }}/pzsvrtool/config-staged"
+pz_config_render_dir: "{{ pz_home }}/pzsvrtool/config-rendered"
+pz_config_state_file: "{{ pz_home }}/pzsvrtool/config-applied.json"
+pz_config_backup_dir: "{{ pz_home }}/pzsvrtool/config-backups"
+pz_config_backup_keep: 10
+# false solo en los tests offline (sin systemd de usuario).
+pz_manage_service: true
+# Espera máxima del apagado ordenado antes de aplicar cambios (cuenta regresiva de 3 min de pzsvrtool).
+pz_stop_timeout_seconds: 600

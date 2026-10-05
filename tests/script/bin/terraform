@@ -11,10 +11,12 @@ if [ "${args[0]}" = "output" ]; then
   if [ -n "${!var+x}" ]; then printf '%s' "${!var}"; exit 0; fi
   case "$name" in
     public_ip) printf '203.0.113.10' ;;
+    instance_id) printf 'i-output' ;;
     root_volume_id) printf 'vol-output' ;;
-    backup_bucket_name) printf 'bucket-from-output' ;;
     aws_region) printf 'sa-east-1' ;;
     pz_server_name) printf 'world1' ;;
+    ssh_enabled) printf 'true' ;;
+    repo_commit) printf '0123456789abcdef0123456789abcdef01234567' ;;
     *) echo "Output \"$name\" not found" >&2; exit 1 ;;
   esac
 fi

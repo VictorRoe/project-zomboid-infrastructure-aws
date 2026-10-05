@@ -41,3 +41,6 @@ terraform.rc
 
 # Entorno local de VM (imágenes, discos, claves, logs)
 .local-vm/
+
+# Configuración del backend remoto (bucket/región; ver terraform/backend.hcl.example)
+backend.hcl

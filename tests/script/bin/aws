@@ -1,8 +1,17 @@
 #!/bin/bash
 # Stub: registra argv y devuelve IDs fijos. Nunca contacta a AWS.
+# STUB_EC2_STATES: estados que devuelve describe-instances, uno por llamada separados
+#   por coma (el último se repite). STUB_AWS_FAIL: "<servicio> <comando>" que falla.
 printf 'aws %s\n' "$*" >> "$STUB_LOG"
+[ -n "${STUB_AWS_FAIL:-}" ] && [ "$1 $2" = "$STUB_AWS_FAIL" ] && { echo "stub: $1 $2 falló" >&2; exit 1; }
 case "$1 $2" in
-  "ec2 describe-volumes") echo "${STUB_VOLUME_ID:-vol-tagged}" ;;
+  "ec2 describe-instances")
+    IFS=, read -ra states <<< "${STUB_EC2_STATES:-running}"
+    n=$(cat "$STUB_DIR/describes" 2>/dev/null || echo 0)
+    echo $((n + 1)) > "$STUB_DIR/describes"
+    [ "$n" -ge "${#states[@]}" ] && n=$(( ${#states[@]} - 1 ))
+    echo "${states[$n]}"
+    ;;
   "ec2 create-snapshot") echo "snap-999" ;;
 esac
 exit 0

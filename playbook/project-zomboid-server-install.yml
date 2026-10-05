@@ -15,9 +15,12 @@
           - ansible_architecture in ['x86_64', 'amd64']
           - ansible_memtotal_mb | int >= pz_min_ram_mb | int
           - ansible_processor_vcpus | int >= pz_min_vcpus | int
+        # ansible_memtotal_mb es la RAM utilizable que informa el kernel (sin swap).
         fail_msg: >-
-          Este playbook espera Debian/Ubuntu x86_64 con al menos
-          {{ pz_min_vcpus }} vCPU y aproximadamente {{ pz_min_ram_mb }} MB de RAM utilizable.
+          Este playbook espera Debian/Ubuntu x86_64 con al menos {{ pz_min_vcpus }} vCPU y
+          {{ pz_min_ram_mb }} MB de RAM utilizable (heap {{ pz_java_xmx_mb }} MB + margen
+          {{ pz_host_overhead_mb }} MB); el host tiene {{ ansible_memtotal_mb }} MB. Usar una
+          instancia más grande o bajar pz_java_xmx_mb.
 
     - name: Validate Project Zomboid variables
       ansible.builtin.import_tasks: tasks/validate.yml
@@ -145,8 +148,13 @@
       ansible.builtin.get_url:
         url: "{{ pzsvrtool_deb_url }}"
         dest: "{{ pzsvrtool_deb_path }}"
+        checksum: "sha256:{{ pzsvrtool_deb_sha256 }}"
         mode: "0644"
         force: false
+      register: pz_deb_download
+      retries: 5
+      delay: 10
+      until: pz_deb_download is succeeded
 
     - name: Install pzsvrtool package
       ansible.builtin.apt:
@@ -232,6 +240,10 @@
           Revisar la salida de pzsvrtool/SteamCMD (red, espacio en disco, permisos).
         quiet: true
 
+    # Heap, contraseña de ingreso y configuración del servidor (tasks/game_settings.yml).
+    - name: Apply heap, join password and server configuration
+      ansible.builtin.import_tasks: tasks/game_settings.yml
+
     - name: Create user systemd configuration directory
       ansible.builtin.file:
         path: "{{ pz_home }}/.config/systemd/user"
@@ -258,6 +270,27 @@
           [Service]
           RemainAfterExit=yes
 
+    # Con pz_wait_for_config el servicio no arranca (ni al reiniciar) hasta que haya una
+    # configuración aplicada o un mundo ya creado (disco existente o restaurado): el primer
+    # arranque crea el mundo con el Map= que haya. "|" = alcanza con una de las condiciones.
+    - name: Wait for an applied configuration before starting the game
+      ansible.builtin.copy:
+        dest: "{{ pz_home }}/.config/systemd/user/pzsvrtool@{{ pz_server_name }}.service.d/wait-config.conf"
+        owner: "{{ pz_user }}"
+        group: "{{ pz_user }}"
+        mode: "0644"
+        content: |
+          [Unit]
+          ConditionPathExists=|{{ pz_config_state_file }}
+          ConditionPathExists=|{{ pz_world_dir }}
+      when: pz_wait_for_config | bool
+
+    - name: Remove the configuration wait when not requested
+      ansible.builtin.file:
+        path: "{{ pz_home }}/.config/systemd/user/pzsvrtool@{{ pz_server_name }}.service.d/wait-config.conf"
+        state: absent
+      when: not pz_wait_for_config | bool
+
     - name: Enable Project Zomboid user service at boot
       ansible.builtin.shell: |
         set -e
@@ -277,6 +310,16 @@
       changed_when: >-
         'Created symlink' in (pz_enable_service.stdout + pz_enable_service.stderr)
 
+    - name: Check for an existing world
+      ansible.builtin.stat:
+        path: "{{ pz_world_dir }}"
+      register: pz_world_stat
+
+    - name: Decide whether the game may start
+      ansible.builtin.set_fact:
+        pz_game_may_start: >-
+          {{ not pz_wait_for_config | bool or pz_config_staged | bool or pz_world_stat.stat.exists }}
+
     - name: Start Project Zomboid service if not already active
       ansible.builtin.shell: |
         set -e
@@ -295,6 +338,7 @@
         executable: /bin/bash
       register: pz_start_service
       changed_when: "'started' in pz_start_service.stdout"
+      when: pz_game_may_start | bool
 
     - name: Wait for Project Zomboid process to start
       ansible.builtin.shell: "pgrep -u {{ pz_user }} -f ProjectZomboid >/dev/null"
@@ -305,6 +349,7 @@
       retries: 60
       delay: 10
       until: pz_process_check.rc == 0
+      when: pz_game_may_start | bool
 
     # -----------------------------------------------------------------------
     # Automatic game update implementation
@@ -503,6 +548,9 @@
           fi
           log "Steam update completed; installed build is now $new_build."
 
+          # Reinstalar restaura ProjectZomboid64.json: volver a fijar el heap.
+          python3 "$HOME/pzsvrtool/pz-set-heap.py" "$HOME/pzserver/ProjectZomboid64.json" {{ pz_java_xmx_mb | int }}
+
           if (( server_was_running == 1 )); then
             /usr/bin/pzsvrtool start
             restart_on_failure=0
@@ -583,6 +631,9 @@
       changed_when: false
       when: not (pz_auto_update_enabled | bool)
 
+    - name: Automatic daily snapshots (only while the instance is running)
+      ansible.builtin.import_tasks: tasks/auto_snapshot.yml
+
     # -----------------------------------------------------------------------
     # Firewall last: allow SSH before enabling UFW.
     # -----------------------------------------------------------------------
@@ -647,6 +698,15 @@
             ventana {{ pz_update_window_start }}-{{ pz_update_window_end }}
             ({{ pz_update_timezone }}), chequeo cada {{ pz_update_check_minutes }} minutos.
           - "Contraseña de admin ({{ pz_admin_name }}): sudo cat {{ pz_admin_password_file }}"
+          - "Contraseña de ingreso de los jugadores: sudo cat {{ pz_join_password_file }} (o script/pz-ctl.sh join-password)"
+          - "Heap de Java: {{ pz_java_xmx_mb }} MB (ProjectZomboid64.json)"
+          - >-
+            Snapshots automáticos: {{ ('diarios a las ' ~ pz_snapshot_time_utc ~ ' UTC con la instancia prendida, se conservan ' ~ pz_snapshot_retain)
+               if pz_auto_snapshot_enabled | bool else 'desactivados' }}
+          - >-
+            {{ 'ESPERANDO CONFIGURACIÓN: el juego no arranca hasta correr script/pz-ctl.sh push-config <dir>.'
+               if not pz_game_may_start | bool else 'Configuración del servidor: ' ~
+               ('subida por el operador (' ~ pz_config_state_file ~ ')' if pz_config_staged | bool else 'la que genera el juego') }}
           - "Console: sudo -iu {{ pz_user }} pzsvrtool console"
           - "Estado del servicio: sudo -u {{ pz_user }} env XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} systemctl --user status pzsvrtool@{{ pz_server_name }}.service"
           - "Timer de actualización: sudo -u {{ pz_user }} env XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} systemctl --user list-timers pz-auto-update.timer"
