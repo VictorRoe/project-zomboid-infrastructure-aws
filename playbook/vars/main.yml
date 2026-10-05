@@ -82,6 +82,6 @@ pz_update_shutdown_timeout_minutes: 20
 # -------------------------------------------------------------------------
 # Basic host requirements
 # -------------------------------------------------------------------------
-# 9000 MB intentionally allows a 10 GiB VM to report ~9.7 GiB usable RAM.
+# 7500 MB leaves margin below the default t3.large (8 GiB), which reports ~7.7 GiB usable RAM.
 pz_min_ram_mb: 7500
 pz_min_vcpus: 2
