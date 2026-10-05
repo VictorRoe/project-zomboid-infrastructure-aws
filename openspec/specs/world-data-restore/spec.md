@@ -1,53 +1,53 @@
 # world-data-restore Specification
 
 ## Purpose
-Ensures a re-provisioned Project Zomboid server comes back with the world and configuration captured by the last backup, instead of starting empty.
+Garantiza que un servidor de Project Zomboid reaprovisionado vuelva con el mundo y la configuración capturados por el último respaldo, en lugar de iniciar vacío.
 
 ## Requirements
 
-### Requirement: Restore from latest backup snapshot
-When a server instance is created, restore is enabled and at least one owned snapshot tagged `pz-world-data-snapshot` exists, the server SHALL boot from a disk created from the most recent such snapshot, sized at least as large as the snapshot.
+### Requirement: Restauración desde el último snapshot de respaldo
+Cuando se crea una instancia de servidor, la restauración está habilitada y existe al menos un snapshot propio etiquetado `pz-world-data-snapshot`, el servidor DEBE (SHALL) arrancar desde un disco creado a partir del snapshot más reciente de ese tipo, con un tamaño al menos igual al del snapshot.
 
-#### Scenario: Snapshot exists
-- **WHEN** the stack is applied and a tagged snapshot `snap-123` is the most recent
-- **THEN** the instance boots from an image backed by `snap-123`
-- **AND** the `restored_from_snapshot_id` output equals `snap-123`
+#### Scenario: Existe un snapshot
+- **WHEN** se aplica el stack y un snapshot etiquetado `snap-123` es el más reciente
+- **THEN** la instancia arranca desde una imagen respaldada por `snap-123`
+- **AND** el output `restored_from_snapshot_id` es igual a `snap-123`
 
-### Requirement: Fresh install without snapshot
-When no tagged snapshot exists or restore is disabled, the server SHALL boot from the base Ubuntu image and perform a fresh install.
+### Requirement: Instalación nueva sin snapshot
+Cuando no existe ningún snapshot etiquetado o la restauración está deshabilitada, el servidor DEBE (SHALL) arrancar desde la imagen base de Ubuntu y realizar una instalación nueva.
 
-#### Scenario: No snapshot
-- **WHEN** the stack is applied and no tagged snapshot exists
-- **THEN** the instance uses the base image and `restored_from_snapshot_id` is empty
+#### Scenario: Sin snapshot
+- **WHEN** se aplica el stack y no existe ningún snapshot etiquetado
+- **THEN** la instancia usa la imagen base y `restored_from_snapshot_id` está vacío
 
-#### Scenario: Restore disabled
-- **WHEN** a tagged snapshot exists and `restore_from_snapshot = false`
-- **THEN** the instance uses the base image and no restored image is registered
+#### Scenario: Restauración deshabilitada
+- **WHEN** existe un snapshot etiquetado y `restore_from_snapshot = false`
+- **THEN** la instancia usa la imagen base y no se registra ninguna imagen restaurada
 
-### Requirement: Restore a specific snapshot
-The stack SHALL accept `restore_snapshot_id`; when non-empty and restore is enabled, that snapshot SHALL be used instead of the latest tagged one.
+### Requirement: Restaurar un snapshot específico
+El stack DEBE (SHALL) aceptar `restore_snapshot_id`; cuando no esté vacío y la restauración esté habilitada, se DEBE (SHALL) usar ese snapshot en lugar del último etiquetado.
 
-#### Scenario: Explicit snapshot
-- **WHEN** `restore_snapshot_id = "snap-old"` while `snap-new` is the latest tagged snapshot
-- **THEN** the instance boots from an image backed by `snap-old`
+#### Scenario: Snapshot explícito
+- **WHEN** `restore_snapshot_id = "snap-old"` mientras `snap-new` es el último snapshot etiquetado
+- **THEN** la instancia arranca desde una imagen respaldada por `snap-old`
 
-### Requirement: Idempotent first boot on restored disk
-Provisioning SHALL succeed on a restored disk that already contains the repository checkout and an installed server, without reinstalling the game or deleting world data.
+### Requirement: Primer arranque idempotente sobre un disco restaurado
+El aprovisionamiento DEBE (SHALL) completarse con éxito sobre un disco restaurado que ya contiene el checkout del repositorio y un servidor instalado, sin reinstalar el juego ni eliminar los datos del mundo.
 
-#### Scenario: Repo already present
-- **WHEN** the boot script runs and `/home/ubuntu/repo` already exists
-- **THEN** it updates the checkout instead of failing on clone and re-runs the playbook
+#### Scenario: El repositorio ya está presente
+- **WHEN** se ejecuta el script de arranque y `/home/ubuntu/repo` ya existe
+- **THEN** actualiza el checkout en lugar de fallar al clonar y vuelve a ejecutar el playbook
 
-### Requirement: Running server is never rolled back
-A newer or different snapshot appearing SHALL NOT replace an existing server instance.
+### Requirement: Un servidor en ejecución nunca se revierte
+La aparición de un snapshot más nuevo o distinto NO DEBE (SHALL NOT) reemplazar una instancia de servidor existente.
 
-#### Scenario: Snapshot appears while server runs
-- **WHEN** the instance exists and a new tagged snapshot is created
-- **THEN** a subsequent plan shows no replacement of the instance
+#### Scenario: Aparece un snapshot mientras el servidor está en ejecución
+- **WHEN** la instancia existe y se crea un nuevo snapshot etiquetado
+- **THEN** un plan posterior no muestra ningún reemplazo de la instancia
 
-### Requirement: Only completed snapshots are restored
-Restore SHALL refuse a snapshot that is not in the completed state, failing at plan/apply with a clear error.
+### Requirement: Solo se restauran snapshots completados
+La restauración DEBE (SHALL) rechazar un snapshot que no esté en estado completado, fallando en el plan/apply con un error claro.
 
-#### Scenario: Snapshot pending
-- **WHEN** the chosen snapshot's state is `pending`
-- **THEN** the run fails with an error naming the snapshot
+#### Scenario: Snapshot pendiente
+- **WHEN** el estado del snapshot elegido es `pending`
+- **THEN** la ejecución falla con un error que nombra el snapshot

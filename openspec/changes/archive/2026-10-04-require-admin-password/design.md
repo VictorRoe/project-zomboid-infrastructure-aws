@@ -1,28 +1,28 @@
 # Design
 
-## Context
+## Contexto
 
-Playbook runs on the instance itself (`ansible_connection=local`) as `ubuntu` with `become: true`. Vars live inline in the play. pzsvrtool reads `pzRootAdminPassword` from its config file.
+El playbook se ejecuta en la propia instancia (`ansible_connection=local`) como `ubuntu` con `become: true`. Las variables están en línea en el play. pzsvrtool lee `pzRootAdminPassword` desde su archivo de configuración.
 
-## Goals / Non-Goals
+## Objetivos / No objetivos
 
-**Goals:** secure-by-default unattended runs; persistent credential; offline tests.
+**Objetivos:** ejecuciones sin supervisión seguras por defecto; credencial persistente; pruebas offline.
 
-**Non-Goals:** Secrets Manager/SSM integration (needs IAM instance profile; possible follow-up); rotating the password of an already-created admin account inside the PZ database.
+**No objetivos:** integración con Secrets Manager/SSM (requiere perfil de instancia IAM; posible seguimiento); rotar la contraseña de una cuenta de administrador ya creada dentro de la base de datos de PZ.
 
-## Decisions
+## Decisiones
 
-- **Generate on the host, persist on disk** over passing via user_data or Terraform `random_password` (both leak into metadata/state). The file lives on the root disk, so snapshot restore keeps it.
-- **Generation:** `stat` file → if missing, `copy` content `lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters','digits'], length=32)` with `no_log`; then `slurp` + `set_fact pz_admin_password_effective` (`no_log`). A supplied password is also written to the file so the file is always the source of truth for operators.
-- **Defaults:** `pz_admin_password: ""` (empty = generate). Validation (in `tasks/validate.yml`) only applies the strength rules when non-empty. The assert uses `quiet: true` instead of `no_log: true` so `fail_msg` is shown (assert output lists expressions, not values) — review finding.
-- **Ordering:** `admin_password.yml` is included right after "Create pzsvrtool configuration directory" (needs the user and directory) and before "Configure pzsvrtool non-interactively".
-- **Testability:** both task files are parameterized by `pz_user`/`pz_home`; `tests/ansible/test_admin_password.yml` runs them on localhost without become, `pz_user` = current user, `pz_home` = temp dir. A runner script asserts expected pass/fail exit codes and file mode/persistence.
+- **Generar en el host, persistir en disco** en lugar de pasarla por user_data o por `random_password` de Terraform (ambos filtran a los metadatos/estado). El archivo reside en el disco raíz, por lo que la restauración de snapshot lo conserva.
+- **Generación:** `stat` del archivo → si falta, `copy` con contenido `lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters','digits'], length=32)` con `no_log`; luego `slurp` + `set_fact pz_admin_password_effective` (`no_log`). Una contraseña proporcionada también se escribe en el archivo, de modo que el archivo sea siempre la fuente de verdad para los operadores.
+- **Valores por defecto:** `pz_admin_password: ""` (vacío = generar). La validación (en `tasks/validate.yml`) solo aplica las reglas de robustez cuando no está vacía. La aserción usa `quiet: true` en lugar de `no_log: true` para que se muestre `fail_msg` (la salida de assert lista expresiones, no valores) — hallazgo de revisión.
+- **Orden:** `admin_password.yml` se incluye justo después de "Create pzsvrtool configuration directory" (necesita el usuario y el directorio) y antes de "Configure pzsvrtool non-interactively".
+- **Capacidad de prueba:** ambos archivos de tareas se parametrizan con `pz_user`/`pz_home`; `tests/ansible/test_admin_password.yml` los ejecuta en localhost sin become, con `pz_user` = usuario actual y `pz_home` = directorio temporal. Un script ejecutor verifica los códigos de salida esperados de éxito/fallo y el modo/persistencia del archivo.
 
-## Risks / Trade-offs
+## Riesgos / Compromisos
 
-- [PZ keeps the admin password in its DB after first start, so changing it later in config may not take effect] → documented in operations; out of scope.
-- [Operator can't see the generated password without SSH] → SSH access added by `instance-ssh-access`; retrieval command printed in the playbook's final debug message (path only, not value).
+- [PZ conserva la contraseña de administrador en su base de datos tras el primer inicio, por lo que cambiarla después en la configuración puede no surtir efecto] → documentado en operaciones; fuera de alcance.
+- [El operador no puede ver la contraseña generada sin SSH] → acceso SSH agregado por `instance-ssh-access`; el comando de obtención se imprime en el mensaje de depuración final del playbook (solo la ruta, no el valor).
 
-## Migration Plan
+## Plan de migración
 
-Existing servers keep their current DB admin; on next playbook run a password file is created. Rollback: revert.
+Los servidores existentes conservan su administrador actual en la base de datos; en la siguiente ejecución del playbook se crea un archivo de contraseña. Reversión: revertir el cambio.

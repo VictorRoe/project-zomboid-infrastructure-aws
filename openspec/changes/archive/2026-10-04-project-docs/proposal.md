@@ -1,29 +1,29 @@
 # Proposal
 
-## Why
+## Por qué
 
-The repo has a one-line README and no record of how the pieces fit together or why they are built this way. The five fix changes (issues #1–#5) need a place to record current state and decisions, and the project needs a changelog to keep releases readable.
+El repositorio tiene un README de una sola línea y ningún registro de cómo encajan las piezas ni de por qué se construyeron así. Los cinco cambios de corrección (issues #1–#5) necesitan un lugar donde registrar el estado actual y las decisiones, y el proyecto necesita un changelog para mantener legibles los lanzamientos.
 
-## What Changes
+## Qué cambia
 
-- Add `docs/` in the maintainer's established convention:
-  - `docs/architecture.md` — components, AWS resources, on-host layout, diagram.
-  - `docs/flows.md` — provisioning, backup & destroy, auto-update, (later) restore and testing flows.
-  - `docs/spec.md` — current target state (variables, ports, paths, services).
-  - `docs/decisions.md` — numbered, dated decision log (D1…), each with why and consequences; seeded with the existing design decisions inferred from code.
-  - `docs/operations.md` — day-to-day commands.
-- Add `CHANGELOG.md` (Keep a Changelog format, `[Unreleased]` section).
-- Commit `CLAUDE.md`; expand README to a short overview linking to `docs/`.
-- Every subsequent change updates `docs/spec.md`, appends to `docs/decisions.md` and adds a `CHANGELOG.md` entry.
+- Agregar `docs/` según la convención establecida por el mantenedor:
+  - `docs/architecture.md` — componentes, recursos de AWS, estructura en el host, diagrama.
+  - `docs/flows.md` — flujos de aprovisionamiento, respaldo y destrucción, actualización automática, (más adelante) restauración y pruebas.
+  - `docs/spec.md` — estado objetivo actual (variables, puertos, rutas, servicios).
+  - `docs/decisions.md` — registro de decisiones numeradas y fechadas (D1…), cada una con su motivo y sus consecuencias; inicializado con las decisiones de diseño existentes inferidas del código.
+  - `docs/operations.md` — comandos del día a día.
+- Agregar `CHANGELOG.md` (formato Keep a Changelog, sección `[Unreleased]`).
+- Confirmar (commit) `CLAUDE.md`; ampliar el README a una descripción breve que enlace a `docs/`.
+- Cada cambio posterior actualiza `docs/spec.md`, agrega una entrada a `docs/decisions.md` y agrega una entrada a `CHANGELOG.md`.
 
-## Capabilities
+## Capacidades
 
-### New Capabilities
+### Capacidades nuevas
 
-### Modified Capabilities
+### Capacidades modificadas
 
-No behavior changes — documentation only (`skip_specs: true`).
+Sin cambios de comportamiento — solo documentación (`skip_specs: true`).
 
-## Impact
+## Impacto
 
-Docs only: `docs/`, `README.md`, `CHANGELOG.md`, `CLAUDE.md`. Base of the branch stack for the five fix changes.
+Solo documentación: `docs/`, `README.md`, `CHANGELOG.md`, `CLAUDE.md`. Base de la pila de ramas para los cinco cambios de corrección.

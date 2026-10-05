@@ -1,18 +1,18 @@
 # project-zomboid-infrastructure-aws
 
-Terraform + Ansible to run a Project Zomboid dedicated server on a single AWS EC2 instance, with automatic game updates and snapshot-based backups.
+Terraform + Ansible para correr un servidor dedicado de Project Zomboid en una sola instancia EC2 de AWS, con actualizaciones automáticas del juego y backups basados en snapshots.
 
 ```bash
 cd terraform && terraform init && terraform apply
-terraform output -raw public_ip     # connect to <ip>:16261
+terraform output -raw public_ip     # conectarse a <ip>:16261
 ```
 
-## Documentation
+## Documentación
 
-- [Architecture](docs/architecture.md): components, AWS resources, on-host layout
-- [Flows](docs/flows.md): provisioning, auto-update, backup and destroy, restore
-- [Spec](docs/spec.md): current configuration values
-- [Operations](docs/operations.md): day-to-day commands
-- [Decisions](docs/decisions.md): why things are the way they are
+- [Arquitectura](docs/architecture.md): componentes, recursos de AWS, estructura en el host y problemas conocidos
+- [Flujos](docs/flows.md): aprovisionamiento, actualización automática, backup y baja, restauración
+- [Spec](docs/spec.md): valores de configuración actuales
+- [Operación](docs/operations.md): comandos del día a día
+- [Decisiones](docs/decisions.md): por qué las cosas son como son
 - [Changelog](CHANGELOG.md)
-- [Specs](openspec/specs/): behavior contracts (OpenSpec); change history in `openspec/changes/archive/`
+- [Specs](openspec/specs/): contratos de comportamiento (OpenSpec); historial de cambios en `openspec/changes/archive/`

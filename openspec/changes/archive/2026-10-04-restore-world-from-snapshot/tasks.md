@@ -1,17 +1,17 @@
 # Tasks
 
-## 1. Restore wiring
+## 1. Cableado de la restauración
 
-- [x] 1.1 Add `restore_from_snapshot` (bool, default true) and `restore_snapshot_id` (string, default "") variables; verify `terraform validate`
-- [x] 1.2 Compute `local.restore_snapshot_id`, add `data.aws_ebs_snapshot.restore` and `aws_ami.restored` (count-guarded; name, ENA, uefi-preferred, size, completed-state precondition) from that snapshot and `local.instance_ami_id` precedence; use it on `aws_instance.pz_server`; verify `terraform validate`
-- [x] 1.3 Add `restored_from_snapshot_id` output; verify via test assertion in 2.1
+- [x] 1.1 Agregar las variables `restore_from_snapshot` (bool, por defecto true) y `restore_snapshot_id` (string, por defecto ""); verificar con `terraform validate`
+- [x] 1.2 Calcular `local.restore_snapshot_id`, agregar `data.aws_ebs_snapshot.restore` y `aws_ami.restored` (con guarda count; nombre, ENA, uefi-preferred, tamaño, precondición de estado completado) a partir de ese snapshot y la precedencia de `local.instance_ami_id`; usarlo en `aws_instance.pz_server`; verificar con `terraform validate`
+- [x] 1.3 Agregar el output `restored_from_snapshot_id`; verificar mediante la aserción de prueba en 2.1
 
-## 2. Tests and boot idempotency
+## 2. Pruebas e idempotencia del arranque
 
-- [x] 2.1 Add `terraform/tests/restore.tftest.hcl` covering snapshot present, absent, disabled, explicit-ID and pending-state (`expect_failures`) scenarios with mocked provider; verify `make tf-test` passes without AWS credentials
-- [x] 2.2 Make `user_data` update an existing checkout (git via `runuser -u ubuntu`) instead of cloning; extract it to `terraform/templates/user_data.sh.tftpl` and verify with `bash -n` on the rendered output plus a tftest assertion that it contains the update branch
-- [x] 2.3 Document restore behavior and opt-out variables in README and CLAUDE.md; verify docs match variable names in `variable.tf`
+- [x] 2.1 Agregar `terraform/tests/restore.tftest.hcl` que cubra los escenarios de snapshot presente, ausente, deshabilitado, ID explícito y estado pendiente (`expect_failures`) con proveedor simulado; verificar que `make tf-test` pase sin credenciales de AWS
+- [x] 2.2 Hacer que `user_data` actualice un checkout existente (git mediante `runuser -u ubuntu`) en lugar de clonar; extraerlo a `terraform/templates/user_data.sh.tftpl` y verificar con `bash -n` sobre la salida renderizada, más una aserción de tftest de que contiene la rama de actualización
+- [x] 2.3 Documentar el comportamiento de restauración y las variables de exclusión en README y CLAUDE.md; verificar que la documentación coincida con los nombres de variables en `variable.tf`
 
-## 3. Docs and changelog
+## 3. Documentación y changelog
 
-- [x] 3.1 Update `docs/spec.md`, `docs/architecture.md`/`docs/flows.md` where affected, append a dated decision entry to `docs/decisions.md`, and add an `[Unreleased]` entry to `CHANGELOG.md` referencing the issue; verify links resolve and values match the code
+- [x] 3.1 Actualizar `docs/spec.md`, `docs/architecture.md`/`docs/flows.md` donde corresponda, agregar una entrada de decisión fechada a `docs/decisions.md` y agregar una entrada `[Unreleased]` a `CHANGELOG.md` que referencie el issue; verificar que los enlaces se resuelvan y que los valores coincidan con el código

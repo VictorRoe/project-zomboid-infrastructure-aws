@@ -1,4 +1,4 @@
-# Offline: the AWS provider is mocked, no credentials or API calls are needed.
+# Offline: el provider de AWS está simulado; no hacen falta credenciales ni llamadas a la API.
 mock_provider "aws" {}
 
 override_data {
@@ -13,7 +13,7 @@ run "default_uses_region_lookup" {
 
   assert {
     condition     = aws_instance.pz_server.ami == "ami-lookup123"
-    error_message = "Without ami_id the instance must use the Ubuntu lookup result."
+    error_message = "Sin ami_id la instancia tiene que usar el resultado de la búsqueda de Ubuntu."
   }
 }
 
@@ -26,7 +26,7 @@ run "override_wins" {
 
   assert {
     condition     = aws_instance.pz_server.ami == "ami-override123"
-    error_message = "ami_id must override the lookup."
+    error_message = "ami_id tiene que reemplazar la búsqueda."
   }
 }
 
@@ -39,7 +39,7 @@ run "az_defaults_to_aws_choice" {
 
   assert {
     condition     = var.availability_zone == null
-    error_message = "availability_zone must default to null so AWS picks one in the region."
+    error_message = "availability_zone tiene que ser null por defecto para que AWS elija una en la región."
   }
 }
 
@@ -54,7 +54,7 @@ run "mismatched_az_rejected" {
   expect_failures = [var.availability_zone]
 }
 
-# Runs share state: create the instance, then resolve a different image.
+# Los runs comparten estado: crear la instancia y después resolver otra imagen.
 run "create_instance" {
   command = apply
 }
@@ -68,6 +68,6 @@ run "new_image_does_not_replace_instance" {
 
   assert {
     condition     = aws_instance.pz_server.ami == "ami-lookup123"
-    error_message = "An image change must not alter (replace) the existing instance."
+    error_message = "Un cambio de imagen no debe alterar (reemplazar) la instancia existente."
   }
 }

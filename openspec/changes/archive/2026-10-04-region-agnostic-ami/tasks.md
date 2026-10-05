@@ -1,15 +1,15 @@
 # Tasks
 
-## 1. Test harness
+## 1. Arnés de pruebas
 
-- [x] 1.1 Add `terraform { required_version = ">= 1.9" ... required_providers aws }` block and commit `.terraform.lock.hcl` (drop it from `.gitignore`); verify `terraform init -backend=false` succeeds (registry only, no AWS)
-- [x] 1.2 Add `Makefile` with `tf-test`, `ansible-check`, `test` targets and verify `make ansible-check` passes on the current playbook
+- [x] 1.1 Agregar el bloque `terraform { required_version = ">= 1.9" ... required_providers aws }` y confirmar `.terraform.lock.hcl` (quitarlo de `.gitignore`); verificar que `terraform init -backend=false` tenga éxito (solo registro, sin AWS)
+- [x] 1.2 Agregar `Makefile` con los targets `tf-test`, `ansible-check`, `test` y verificar que `make ansible-check` pase con el playbook actual
 
-## 2. Image selection
+## 2. Selección de imagen
 
-- [x] 2.1 Add `ami_id` variable (default `""`) and `data "aws_ami" "ubuntu"` lookup; set `locals.base_ami_id` and use it on `aws_instance.pz_server` with `lifecycle { ignore_changes = [ami] }`; default `availability_zone` to null with region validation; verify `terraform validate` passes
-- [x] 2.2 Add `terraform/tests/ami.tftest.hcl` with mocked provider covering default lookup, override and mismatched-AZ (`expect_failures`) scenarios; verify `make tf-test` passes with no AWS credentials (`env -u AWS_ACCESS_KEY_ID -u AWS_PROFILE`)
+- [x] 2.1 Agregar la variable `ami_id` (por defecto `""`) y la búsqueda `data "aws_ami" "ubuntu"`; definir `locals.base_ami_id` y usarlo en `aws_instance.pz_server` con `lifecycle { ignore_changes = [ami] }`; establecer `availability_zone` en null por defecto con validación de región; verificar que `terraform validate` pase
+- [x] 2.2 Agregar `terraform/tests/ami.tftest.hcl` con proveedor simulado que cubra los escenarios de búsqueda por defecto, sobrescritura y AZ que no coincide (`expect_failures`); verificar que `make tf-test` pase sin credenciales de AWS (`env -u AWS_ACCESS_KEY_ID -u AWS_PROFILE`)
 
-## 3. Docs and changelog
+## 3. Documentación y changelog
 
-- [x] 3.1 Update `docs/spec.md`, `docs/architecture.md`/`docs/flows.md` where affected, append a dated decision entry to `docs/decisions.md`, and add an `[Unreleased]` entry to `CHANGELOG.md` referencing the issue; verify links resolve and values match the code
+- [x] 3.1 Actualizar `docs/spec.md`, `docs/architecture.md`/`docs/flows.md` donde corresponda, agregar una entrada de decisión fechada a `docs/decisions.md` y agregar una entrada `[Unreleased]` a `CHANGELOG.md` que referencie el issue; verificar que los enlaces se resuelvan y que los valores coincidan con el código

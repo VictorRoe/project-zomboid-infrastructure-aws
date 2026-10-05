@@ -1,34 +1,35 @@
 # Changelog
 
-All notable changes to this project are documented here.
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Todos los cambios relevantes del proyecto se documentan acá.
+El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
-## [Unreleased]
+## [Sin publicar]
 
-### Security
-- No more default admin password `test`: when none is supplied, a random 32-character password is generated on the host and stored in `/home/pzserver/pzsvrtool/.admin_password` (0600). A supplied password must be at least 12 characters, not a known weak value, and contain no whitespace or `=` ([#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)).
+### Seguridad
+- Ya no existe la contraseña de admin por defecto `test`: si no se provee una, se genera en el host una contraseña aleatoria de 32 caracteres y se guarda en `/home/pzserver/pzsvrtool/.admin_password` (0600). Una contraseña provista tiene que tener al menos 12 caracteres, no ser un valor débil conocido y no contener espacios ni `=` ([#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)).
 
-### Fixed
-- Backup configuration is consistent: `destroy-and-backup.sh` reads bucket, region, server name, IP and root volume from Terraform outputs (env overrides `S3_BUCKET`, `AWS_REGION`, `PZ_SERVER_NAME`, `TF_DIR`), works from any directory, snapshots the exact `root_volume_id`, and fails fast on missing values ([#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)).
-- `destroy-and-backup.sh` now stops the server with the correct systemd user-bus environment, waits for the game process to exit, and aborts before snapshotting if that cannot be confirmed (`FORCE_SNAPSHOT=1` overrides) ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).
-- World data is restored on `terraform apply` after `destroy-and-backup.sh`: the instance boots from an image registered from the latest `pz-world-data-snapshot`; `restore_snapshot_id` selects a specific snapshot and `restore_from_snapshot = false` opts out ([#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)).
-- The EC2 boot script no longer fails on a restored disk where the repo already exists.
-- Deploys in any AWS region: the Ubuntu AMI is resolved per region, `availability_zone` defaults to an AWS-chosen zone and is validated against `aws_region` ([#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)).
+### Corregido
+- La configuración del backup es consistente: `destroy-and-backup.sh` lee bucket, región, nombre del servidor, IP y volumen raíz de los outputs de Terraform (reemplazables con `S3_BUCKET`, `AWS_REGION`, `PZ_SERVER_NAME`, `TF_DIR`), funciona desde cualquier directorio, hace snapshot del `root_volume_id` exacto y falla temprano si falta un valor ([#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)).
+- `destroy-and-backup.sh` ahora detiene el servidor con el entorno correcto del bus de usuario de systemd, espera a que termine el proceso del juego y aborta antes del snapshot si no puede confirmarlo (`FORCE_SNAPSHOT=1` lo fuerza) ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).
+- Los datos del mundo se restauran en el `terraform apply` posterior a `destroy-and-backup.sh`: la instancia arranca desde una imagen registrada a partir del último `pz-world-data-snapshot`; `restore_snapshot_id` elige un snapshot específico y `restore_from_snapshot = false` lo desactiva ([#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)).
+- El script de arranque de la EC2 ya no falla en un disco restaurado donde el repo ya existe.
+- Despliegue en cualquier región de AWS: la AMI de Ubuntu se resuelve por región y `availability_zone` por defecto la elige AWS y se valida contra `aws_region` ([#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)).
 
-### Changed
-- Playbook defaults moved to `playbook/vars/main.yml`; validation and password handling moved to `playbook/tasks/`.
-- **Migration:** set `s3_bucket_name` to your existing bucket; the script no longer uses the hardcoded `tu-bucket-zomboid-backups`.
-- **Behavior:** the backup script no longer continues silently when the server can't be stopped.
-- AMI changes no longer replace an existing instance (`ignore_changes = [ami]`); use `terraform apply -replace=aws_instance.pz_server` to rebuild.
-- Terraform `>= 1.9` required; provider lock file is committed.
+### Cambiado
+- Toda la documentación y los artefactos de OpenSpec pasaron al castellano.
+- Los valores por defecto del playbook pasaron a `playbook/vars/main.yml`; la validación y el manejo de contraseña, a `playbook/tasks/`.
+- **Migración:** definir `s3_bucket_name` con el bucket existente; el script ya no usa el hardcodeado `tu-bucket-zomboid-backups`.
+- **Comportamiento:** el script de backup ya no sigue en silencio cuando no puede detener el servidor.
+- Los cambios de AMI ya no reemplazan una instancia existente (`ignore_changes = [ami]`); para reconstruir, usar `terraform apply -replace=aws_instance.pz_server`.
+- Se requiere Terraform `>= 1.9`; el lock file de providers se commitea.
 
-### Added
-- `openspec/`: behavior specs (5 capabilities) and the archived change proposals, designs and tasks for #1–#5.
-- `make ansible-test`: offline tests of password validation and generation.
-- `pz_server_name` Terraform variable (passed to the playbook) and outputs `backup_bucket_name`, `aws_region`, `pz_server_name`.
-- Optional SSH access: `ssh_public_key` or `ssh_key_name`, plus `ssh_allowed_cidrs` for port 22 ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).
-- `make script-test`: backup script tests against stubbed `aws`/`ssh`/`terraform`.
-- `restored_from_snapshot_id` output and `make user-data-check`.
-- `make test`: offline Terraform tests (mocked AWS provider) and Ansible syntax check.
-- `docs/` with architecture, flows, spec, operations and decision log.
-- `CHANGELOG.md`, `CLAUDE.md`, and an expanded README.
+### Agregado
+- `openspec/`: specs de comportamiento (5 capacidades) y las propuestas, diseños y tareas archivados de #1–#5.
+- `make ansible-test`: tests offline de validación y generación de la contraseña.
+- Variable de Terraform `pz_server_name` (se pasa al playbook) y outputs `backup_bucket_name`, `aws_region`, `pz_server_name`.
+- Acceso SSH opcional: `ssh_public_key` o `ssh_key_name`, y `ssh_allowed_cidrs` para el puerto 22 ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).
+- `make script-test`: tests del script de backup contra stubs de `aws`/`ssh`/`terraform`.
+- Output `restored_from_snapshot_id` y `make user-data-check`.
+- `make test`: tests offline de Terraform (provider de AWS simulado) y chequeo de sintaxis de Ansible.
+- `docs/` con arquitectura, flujos, spec, operación y registro de decisiones; problemas abiertos #7–#13 registrados.
+- `CHANGELOG.md`, `CLAUDE.md` y un README ampliado.

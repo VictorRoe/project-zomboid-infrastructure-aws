@@ -16,8 +16,8 @@
           - ansible_memtotal_mb | int >= pz_min_ram_mb | int
           - ansible_processor_vcpus | int >= pz_min_vcpus | int
         fail_msg: >-
-          This playbook expects Debian/Ubuntu x86_64 with at least
-          {{ pz_min_vcpus }} vCPU and approximately {{ pz_min_ram_mb }} MB usable RAM.
+          Este playbook espera Debian/Ubuntu x86_64 con al menos
+          {{ pz_min_vcpus }} vCPU y aproximadamente {{ pz_min_ram_mb }} MB de RAM utilizable.
 
     - name: Validate Project Zomboid variables
       ansible.builtin.import_tasks: tasks/validate.yml
@@ -622,17 +622,17 @@
     - name: Show final service information
       ansible.builtin.debug:
         msg:
-          - "Project Zomboid is installed and started as {{ pz_user }}."
-          - "Boot service: pzsvrtool@{{ pz_server_name }}.service (systemd --user + linger)."
+          - "Project Zomboid quedó instalado e iniciado como {{ pz_user }}."
+          - "Servicio de arranque: pzsvrtool@{{ pz_server_name }}.service (systemd --user + linger)."
           - >-
-            Automatic PZ updates: {{ 'enabled' if pz_auto_update_enabled else 'disabled' }};
-            window {{ pz_update_window_start }}-{{ pz_update_window_end }}
-            ({{ pz_update_timezone }}), checked every {{ pz_update_check_minutes }} minutes.
-          - "Admin password ({{ pz_admin_name }}): sudo cat {{ pz_admin_password_file }}"
+            Actualizaciones automáticas de PZ: {{ 'activadas' if pz_auto_update_enabled else 'desactivadas' }};
+            ventana {{ pz_update_window_start }}-{{ pz_update_window_end }}
+            ({{ pz_update_timezone }}), chequeo cada {{ pz_update_check_minutes }} minutos.
+          - "Contraseña de admin ({{ pz_admin_name }}): sudo cat {{ pz_admin_password_file }}"
           - "Console: sudo -iu {{ pz_user }} pzsvrtool console"
-          - "Service status: sudo -iu {{ pz_user }} systemctl --user status pzsvrtool@{{ pz_server_name }}.service"
-          - "Update timer: sudo -iu {{ pz_user }} systemctl --user list-timers pz-auto-update.timer"
-          - "Update logs: sudo -iu {{ pz_user }} journalctl --user -u pz-auto-update.service"
+          - "Estado del servicio: sudo -iu {{ pz_user }} systemctl --user status pzsvrtool@{{ pz_server_name }}.service"
+          - "Timer de actualización: sudo -iu {{ pz_user }} systemctl --user list-timers pz-auto-update.timer"
+          - "Logs de actualización: sudo -iu {{ pz_user }} journalctl --user -u pz-auto-update.service"
 
   handlers:
     - name: Reload system systemd

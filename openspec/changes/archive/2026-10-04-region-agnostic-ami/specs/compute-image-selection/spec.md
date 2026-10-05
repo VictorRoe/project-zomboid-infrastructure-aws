@@ -1,42 +1,41 @@
 # Spec Delta
 
 ## Purpose
-
-Defines how the Project Zomboid server's machine image is selected so the stack deploys in any AWS region without editing code.
+Define cómo se selecciona la imagen de máquina del servidor de Project Zomboid para que el stack se despliegue en cualquier región de AWS sin editar código.
 
 ## ADDED Requirements
 
-### Requirement: Region-resolved default image
-When no image override is supplied, the stack SHALL use the most recent Canonical Ubuntu Server LTS x86_64 (hvm, gp3/ebs) image available in the configured `aws_region`.
+### Requirement: Imagen por defecto resuelta por región
+Cuando no se suministra una imagen explícita, el stack DEBE (SHALL) usar la imagen Canonical Ubuntu Server LTS x86_64 (hvm, gp3/ebs) más reciente disponible en la `aws_region` configurada.
 
-#### Scenario: Default lookup
-- **WHEN** the stack is planned with no `ami_id` and the Ubuntu image lookup returns `ami-lookup123`
-- **THEN** the instance uses `ami-lookup123`
+#### Scenario: Búsqueda por defecto
+- **WHEN** se planifica el stack sin `ami_id` y la búsqueda de la imagen de Ubuntu devuelve `ami-lookup123`
+- **THEN** la instancia usa `ami-lookup123`
 
-### Requirement: Explicit image override
-The stack SHALL accept an optional `ami_id` input; when it is non-empty and no world restore applies, the instance SHALL use exactly that image and the lookup result SHALL be ignored.
+### Requirement: Imagen explícita
+El stack DEBE (SHALL) aceptar una entrada opcional `ami_id`; cuando no esté vacía y no aplique una restauración del mundo, la instancia DEBE (SHALL) usar exactamente esa imagen y se DEBE (SHALL) ignorar el resultado de la búsqueda.
 
-#### Scenario: Override supplied
-- **WHEN** the stack is planned with `ami_id = "ami-override123"`
-- **THEN** the instance's image is `ami-override123`
+#### Scenario: Imagen explícita suministrada
+- **WHEN** se planifica el stack con `ami_id = "ami-override123"`
+- **THEN** la imagen de la instancia es `ami-override123`
 
-### Requirement: Offline verification
-The image-selection behavior SHALL be verifiable with mocked providers, requiring no AWS credentials or network calls to AWS APIs.
+### Requirement: Verificación sin conexión
+El comportamiento de selección de imagen DEBE (SHALL) poder verificarse con proveedores simulados (mocks), sin requerir credenciales de AWS ni llamadas de red a las APIs de AWS.
 
-#### Scenario: Tests run without credentials
-- **WHEN** `make test` runs with no AWS credentials configured
-- **THEN** the image-selection tests execute and pass
+#### Scenario: Las pruebas se ejecutan sin credenciales
+- **WHEN** `make test` se ejecuta sin credenciales de AWS configuradas
+- **THEN** las pruebas de selección de imagen se ejecutan y pasan
 
-### Requirement: No implicit replacement on image change
-A change in the resolved image SHALL NOT replace an existing server instance; replacement SHALL happen only when explicitly requested.
+### Requirement: Sin reemplazo implícito ante un cambio de imagen
+Un cambio en la imagen resuelta NO DEBE (SHALL NOT) reemplazar una instancia de servidor existente; el reemplazo DEBE (SHALL) ocurrir solo cuando se solicite explícitamente.
 
-#### Scenario: Newer image published
-- **WHEN** the instance exists and the lookup later resolves a different image ID
-- **THEN** the plan shows no replacement of the instance
+#### Scenario: Se publica una imagen más nueva
+- **WHEN** la instancia existe y la búsqueda luego resuelve un ID de imagen distinto
+- **THEN** el plan no muestra ningún reemplazo de la instancia
 
-### Requirement: Region-consistent placement
-The availability zone SHALL default to one chosen by AWS within `aws_region`, and an explicitly set zone outside that region SHALL be rejected at plan time.
+### Requirement: Ubicación coherente con la región
+La zona de disponibilidad DEBE (SHALL) tomar por defecto una elegida por AWS dentro de `aws_region`, y una zona definida explícitamente fuera de esa región DEBE (SHALL) rechazarse en el momento del plan.
 
-#### Scenario: Mismatched zone
-- **WHEN** `aws_region = "sa-east-1"` and `availability_zone = "us-east-1a"`
-- **THEN** planning fails with a validation error
+#### Scenario: Zona que no coincide
+- **WHEN** `aws_region = "sa-east-1"` y `availability_zone = "us-east-1a"`
+- **THEN** la planificación falla con un error de validación

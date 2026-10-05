@@ -1,14 +1,14 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Este archivo orienta a Claude Code (claude.ai/code) cuando trabaja con el código de este repositorio.
 
-## What this is
+## Qué es
 
-Infrastructure-as-code to host a Project Zomboid dedicated server on a single AWS EC2 instance. There is no application code or build step: the repo is Terraform + one Ansible playbook + one Bash script, with an offline (mocked) test suite. Comments and descriptions are mostly in Spanish.
+Infraestructura como código para alojar un servidor dedicado de Project Zomboid en una sola instancia EC2 de AWS. No hay código de aplicación ni paso de build: el repo es Terraform + un playbook de Ansible + un script de Bash, con una suite de tests offline (con mocks). Toda la documentación está en castellano; los identificadores y comandos, en inglés.
 
-## Commands
+## Comandos
 
-Terraform (run from `terraform/`; state is local, no backend configured):
+Terraform (correr desde `terraform/`; el estado es local, sin backend):
 
 ```bash
 terraform init
@@ -18,51 +18,53 @@ terraform apply
 terraform output -raw public_ip
 ```
 
-Offline test suite (no AWS credentials; the provider is mocked). Needs Terraform >= 1.9 (installed at `~/.local/bin/terraform` on this machine):
+Suite de tests offline (sin credenciales de AWS; el provider está simulado). Necesita Terraform >= 1.9 (instalado en `~/.local/bin/terraform` en esta máquina):
 
 ```bash
-make test                                                     # all checks
+make test                                                     # todos los chequeos
 make tf-test                                                  # init + fmt -check + validate + terraform test
-make user-data-check                                          # render EC2 boot script, bash -n + shellcheck
-make script-test                                              # backup script vs stubbed aws/ssh/terraform (tests/script/bin)
-make ansible-test                                             # admin password validation/generation on localhost
-terraform -chdir=terraform test -filter=tests/ami.tftest.hcl  # single suite
+make user-data-check                                          # renderiza el script de arranque, bash -n + shellcheck
+make script-test                                              # script de backup contra stubs de aws/ssh/terraform (tests/script/bin)
+make ansible-test                                             # validación/generación de la contraseña de admin en localhost
+terraform -chdir=terraform test -filter=tests/ami.tftest.hcl  # una sola suite
 ```
 
-Ansible (validate locally without a target host):
+Ansible (validar localmente sin host destino):
 
 ```bash
 ansible-playbook --syntax-check -i playbook/inventory.ini playbook/project-zomboid-server-install.yml
-ansible-lint playbook/project-zomboid-server-install.yml   # if installed
-# Override vars instead of editing defaults (playbook/vars/main.yml), e.g. a supplied admin password:
+ansible-lint playbook/project-zomboid-server-install.yml   # si está instalado
+# Reemplazar variables en lugar de editar los valores por defecto (playbook/vars/main.yml), p. ej. una contraseña de admin provista:
 ansible-playbook -i playbook/inventory.ini playbook/project-zomboid-server-install.yml -e pz_admin_password=...
 ```
 
-Teardown with backup: `script/destroy-and-backup.sh` (any cwd; uses `terraform -chdir=<repo>/terraform`, config from outputs, env overrides `S3_BUCKET`/`AWS_REGION`/`PZ_SERVER_NAME`/`TF_DIR`).
+Baja con backup: `script/destroy-and-backup.sh` (desde cualquier directorio; usa `terraform -chdir=<repo>/terraform`, la configuración sale de los outputs y se reemplaza con `S3_BUCKET`/`AWS_REGION`/`PZ_SERVER_NAME`/`TF_DIR`).
 
-## Architecture / how the pieces connect
+## Arquitectura: cómo se conectan las piezas
 
-1. **Terraform** (`terraform/main.tf`) creates a security group (UDP 16261-16262, 8766; TCP 22) and one Ubuntu EC2 instance with a 30 GB gp3 root volume tagged `pz-world-data-root`.
-2. **EC2 `user_data`** (`terraform/templates/user_data.sh.tftpl`) installs Ansible, then clones (or, on a restored disk, fetches/resets as `ubuntu`) this repo **from GitHub (`VictorRoe/project-zomboid-infrastructure-aws`)** and runs the playbook against `localhost`. Consequence: playbook changes only take effect on new instances after they are pushed to that repo's default branch.
-3. **Ansible playbook** (`playbook/project-zomboid-server-install.yml`, `inventory.ini` = local connection) configures the host:
-   - Creates the `pzserver` user, swap file, and installs the pinned `pzsvrtool` .deb (Lu5ck/pzsvrtool), which wraps SteamCMD (app 380870) and tmux.
-   - Runs the server as a **systemd user service** `pzsvrtool@<pz_server_name>.service` under `pzserver` with linger enabled. All `systemctl --user` calls go through `runuser` with explicit `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS`; preserve that pattern when adding tasks.
-   - Defaults live in `playbook/vars/main.yml`; validation in `tasks/validate.yml`. The admin password is supplied or generated and persisted in `~pzserver/pzsvrtool/.admin_password` (`tasks/admin_password.yml`), then written to `pzsvrtool.config`. Never pass secrets through Terraform/user_data, and keep `no_log` on tasks that handle the password.
-   - Installs an embedded `pz-auto-update.sh` plus a user `.service`/`.timer` that polls Steam and only performs updates inside a configured time window (graceful countdown → wait for shutdown → backup → reinstall → verify buildid → restart, with recovery restart on failure).
-   - Configures UFW last (SSH allowed before enabling). UFW ports must stay in sync with the Terraform security group.
-4. **Backup/restore**: `destroy-and-backup.sh` stops the service over SSH (needs `ssh_public_key`/`ssh_key_name`; aborts unless the game process is confirmed gone), snapshots the root volume, tags it `pz-world-data-snapshot`, writes the snapshot ID to S3, then `terraform destroy`. On the next create, `main.tf` registers an image (`aws_ami.restored`) from the latest tagged snapshot (or `restore_snapshot_id`) and boots from it; `restore_from_snapshot = false` opts out.
+1. **Terraform** (`terraform/main.tf`) crea un security group (UDP 16261-16262, 8766; TCP 22) y una instancia EC2 Ubuntu con un volumen raíz gp3 de 30 GB con tag `pz-world-data-root`.
+2. **`user_data` de la EC2** (`terraform/templates/user_data.sh.tftpl`) instala Ansible, clona este repo **desde GitHub (`VictorRoe/project-zomboid-infrastructure-aws`)** (o, en un disco restaurado, hace fetch/reset como `ubuntu`) y corre el playbook contra `localhost`. Consecuencia: los cambios al playbook solo llegan a instancias nuevas después de pushearlos a la rama por defecto de ese repo.
+3. **El playbook de Ansible** (`playbook/project-zomboid-server-install.yml`, `inventory.ini` = conexión local) configura el host:
+   - Crea el usuario `pzserver` y el archivo de swap, e instala el `.deb` de `pzsvrtool` con versión fija (Lu5ck/pzsvrtool), que envuelve SteamCMD (app 380870) y tmux.
+   - Corre el servidor como **servicio systemd de usuario** `pzsvrtool@<pz_server_name>.service` de `pzserver`, con linger activo. Todas las llamadas a `systemctl --user` pasan por `runuser` con `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS` explícitos; mantener ese patrón al agregar tareas.
+   - Los valores por defecto están en `playbook/vars/main.yml`; la validación, en `tasks/validate.yml`. La contraseña de admin se provee o se genera y se persiste en `~pzserver/pzsvrtool/.admin_password` (`tasks/admin_password.yml`), y después se escribe en `pzsvrtool.config`. Nunca pasar secretos por Terraform/user_data, y mantener `no_log` en las tareas que manejan la contraseña.
+   - Instala un `pz-auto-update.sh` embebido más un `.service`/`.timer` de usuario que consulta Steam y solo actualiza dentro de una ventana horaria (cuenta regresiva ordenada → espera del apagado → backup → reinstalación → verificación del buildid → reinicio, con reinicio de recuperación si falla).
+   - Configura UFW al final (SSH permitido antes de activarlo). Los puertos de UFW tienen que coincidir con el security group de Terraform.
+4. **Backup/restauración:** `destroy-and-backup.sh` detiene el servicio por SSH (necesita `ssh_public_key`/`ssh_key_name`; aborta si no se confirma que el proceso del juego terminó), hace snapshot del volumen raíz con el tag `pz-world-data-snapshot`, escribe el ID del snapshot en S3 y ejecuta `terraform destroy`. En la siguiente creación, `main.tf` registra una imagen (`aws_ami.restored`) desde el último snapshot con tag (o `restore_snapshot_id`) y arranca desde ella; `restore_from_snapshot = false` lo desactiva.
 
-## Invariants
+## Invariantes
 
-- Configuration flows Terraform variables → outputs → backup script, and → `user_data` → playbook (`pz_server_name`). Don't hardcode bucket/region/server name elsewhere. The S3 bucket is intentionally not managed by this stack.
-- `aws_instance.pz_server` ignores `ami` changes on purpose: the root disk is the world, so neither a newer Ubuntu image nor a newer snapshot may replace a running server. Never remove that without a backup strategy.
-- The backup script must never snapshot without a confirmed stop; new AWS/SSH/Terraform calls in it need matching behaviour in `tests/script/bin` stubs.
-- Terraform tests mock AWS; a mocked `aws_ebs_snapshot_ids` returns no IDs, so tests needing a snapshot must `override_data` every snapshot data source by full address (see `terraform/tests/restore.tftest.hcl`).
+- La configuración fluye variables de Terraform → outputs → script de backup, y → `user_data` → playbook (`pz_server_name`). No hardcodear bucket/región/nombre del servidor en otro lado. El bucket S3 no lo gestiona este stack a propósito.
+- `aws_instance.pz_server` ignora los cambios de `ami` a propósito: el disco raíz es el mundo, así que ni una imagen de Ubuntu más nueva ni un snapshot más nuevo pueden reemplazar un servidor en marcha. Nunca quitarlo sin una estrategia de backup.
+- El script de backup nunca debe hacer snapshot sin una detención confirmada; toda llamada nueva a AWS/SSH/Terraform en él necesita su comportamiento en los stubs de `tests/script/bin`.
+- Los tests de Terraform simulan AWS; un `aws_ebs_snapshot_ids` simulado no devuelve IDs, así que los tests que necesitan un snapshot tienen que hacer `override_data` de cada data source de snapshot por dirección completa (ver `terraform/tests/restore.tftest.hcl`).
 
-## Workflow
+## Flujo de trabajo
 
-Changes are spec-driven with OpenSpec (`/opsx:*` commands; the `.claude/` skills live in the parent directory). `openspec/specs/` holds the behavior contracts (capabilities: `compute-image-selection`, `world-data-restore`, `instance-access`, `world-backup`, `admin-credentials`); in-flight changes go in `openspec/changes/`, completed ones in `openspec/changes/archive/`. Validate with `openspec validate --all --strict`.
+Los cambios se hacen guiados por specs con OpenSpec (comandos `/opsx:*`; las skills de `.claude/` están en el directorio padre). `openspec/specs/` contiene los contratos de comportamiento (capacidades: `compute-image-selection`, `world-data-restore`, `instance-access`, `world-backup`, `admin-credentials`); los cambios en curso van en `openspec/changes/` y los terminados en `openspec/changes/archive/`. Validar con `openspec validate --all --strict`. `openspec/config.yaml` fija el idioma (castellano) y las reglas de tests offline.
 
-## Documentation rules
+Los problemas abiertos (#7–#13) están listados con prioridad en `docs/architecture.md`; cada uno se trabaja como un cambio de OpenSpec propio.
 
-`docs/` holds architecture, flows, spec (current state), operations and the decision log; only README, CLAUDE.md and CHANGELOG.md live at the root. Every change must update `docs/spec.md` (and `architecture.md`/`flows.md` if affected), append a numbered, dated `D<n>` entry to `docs/decisions.md` (decision, why, consequences), and add an `[Unreleased]` entry to `CHANGELOG.md`.
+## Reglas de documentación
+
+`docs/` contiene arquitectura, flujos, spec (estado actual), operación y el registro de decisiones; en la raíz solo viven README, CLAUDE.md y CHANGELOG.md. Todo cambio tiene que actualizar `docs/spec.md` (y `architecture.md`/`flows.md` si corresponde), agregar una entrada numerada y fechada `D<n>` en `docs/decisions.md` (decisión, por qué, consecuencias) y una entrada en la sección `[Sin publicar]` de `CHANGELOG.md`. Todo en castellano.

@@ -1,26 +1,26 @@
 # Proposal
 
-## Why
+## Por qué
 
-`script/destroy-and-backup.sh` snapshots the server's root disk (tag `pz-world-data-snapshot`) before `terraform destroy`, and `main.tf` even looks the latest snapshot up — but nothing consumes it, so the next `terraform apply` boots a blank Ubuntu disk and the world is effectively lost (VictorRoe/project-zomboid-infrastructure-aws#1).
+`script/destroy-and-backup.sh` crea un snapshot del disco raíz del servidor (etiqueta `pz-world-data-snapshot`) antes de `terraform destroy`, y `main.tf` incluso busca el último snapshot — pero nada lo consume, así que el siguiente `terraform apply` arranca un disco de Ubuntu en blanco y el mundo se pierde en la práctica (VictorRoe/project-zomboid-infrastructure-aws#1).
 
-## What Changes
+## Qué cambia
 
-- When a backup snapshot exists, register a machine image from it and boot the server from that image, bringing back the whole disk (world saves, pzsvrtool config, installed game).
-- Add `restore_from_snapshot` (default `true`) to opt out, and `restore_snapshot_id` to restore a specific snapshot instead of the latest tagged one.
-- Make the EC2 boot script idempotent so it succeeds on a restored disk where the repo and server already exist.
-- Expose which snapshot (if any) the instance was restored from as an output.
-- Mocked `terraform test` coverage for the with/without snapshot paths.
+- Cuando existe un snapshot de respaldo, registrar una imagen de máquina a partir de él y arrancar el servidor desde esa imagen, recuperando el disco completo (partidas del mundo, configuración de pzsvrtool, juego instalado).
+- Agregar `restore_from_snapshot` (por defecto `true`) para excluirse, y `restore_snapshot_id` para restaurar un snapshot específico en lugar del último etiquetado.
+- Hacer idempotente el script de arranque de EC2 para que tenga éxito sobre un disco restaurado donde el repositorio y el servidor ya existen.
+- Exponer como output qué snapshot (si lo hay) se usó para restaurar la instancia.
+- Cobertura con `terraform test` simulado para los caminos con y sin snapshot.
 
-## Capabilities
+## Capacidades
 
-### New Capabilities
-- `world-data-restore`: restoring server state from the most recent (or a chosen) backup snapshot on provisioning.
+### Capacidades nuevas
+- `world-data-restore`: restauración del estado del servidor desde el snapshot de respaldo más reciente (o uno elegido) al aprovisionar.
 
-### Modified Capabilities
+### Capacidades modificadas
 
-## Impact
+## Impacto
 
-- `terraform/main.tf` (new `aws_ami` resource, image precedence, user_data), `variable.tf`, `output.tf`, new `terraform/tests/restore.tftest.hcl`.
-- Depends on `region-agnostic-ami` (uses its `local.base_ami_id` and test harness).
-- The registered image is Terraform-managed and deregistered on destroy; snapshots themselves stay unmanaged and persist.
+- `terraform/main.tf` (nuevo recurso `aws_ami`, precedencia de imagen, user_data), `variable.tf`, `output.tf`, nuevo `terraform/tests/restore.tftest.hcl`.
+- Depende de `region-agnostic-ami` (usa su `local.base_ami_id` y su arnés de pruebas).
+- La imagen registrada es administrada por Terraform y se desregistra al destruir; los snapshots en sí no son administrados y persisten.

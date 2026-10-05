@@ -1,15 +1,15 @@
 # Tasks
 
-## 1. Validation
+## 1. Validación
 
-- [x] 1.1 Move variable validation to `playbook/tasks/validate.yml`, set `pz_admin_password: ""`, add strength rules (≥12, denylist, no whitespace/`=`) applied only when non-empty, `quiet: true` instead of `no_log`; verify `make ansible-check`
-- [x] 1.2 Add `tests/ansible/` runner + test playbook covering weak, short, `=`/whitespace and strong passwords; verify `make ansible-test` passes
+- [x] 1.1 Mover la validación de variables a `playbook/tasks/validate.yml`, definir `pz_admin_password: ""`, agregar reglas de robustez (≥12, lista de denegación, sin espacios/`=`) aplicadas solo cuando no está vacía, `quiet: true` en lugar de `no_log`; verificar con `make ansible-check`
+- [x] 1.2 Agregar el ejecutor `tests/ansible/` + playbook de prueba que cubra contraseñas débiles, cortas, con `=`/espacios y robustas; verificar que `make ansible-test` pase
 
-## 2. Generation and persistence
+## 2. Generación y persistencia
 
-- [x] 2.1 Add `playbook/tasks/admin_password.yml` (generate if missing, persist 0600, slurp into effective fact, all `no_log`) and use the effective fact in `pzsvrtool.config`; verify tests for first-run generation (length ≥ 24, mode 0600) and reuse on second run
-- [x] 2.2 Update final debug message with retrieval command (no value); verify a test run's output doesn't contain the password
+- [x] 2.1 Agregar `playbook/tasks/admin_password.yml` (generar si falta, persistir con 0600, slurp en el fact efectivo, todo con `no_log`) y usar el fact efectivo en `pzsvrtool.config`; verificar pruebas de generación en la primera ejecución (longitud ≥ 24, modo 0600) y de reutilización en la segunda
+- [x] 2.2 Actualizar el mensaje de depuración final con el comando de obtención (sin el valor); verificar que la salida de una ejecución de prueba no contenga la contraseña
 
-## 3. Docs and changelog
+## 3. Documentación y changelog
 
-- [x] 3.1 Update `docs/spec.md`, `docs/architecture.md`/`docs/flows.md` where affected, append a dated decision entry to `docs/decisions.md`, and add an `[Unreleased]` entry to `CHANGELOG.md` referencing the issue; verify links resolve and values match the code
+- [x] 3.1 Actualizar `docs/spec.md`, `docs/architecture.md`/`docs/flows.md` donde corresponda, agregar una entrada de decisión con fecha a `docs/decisions.md` y una entrada `[Unreleased]` en `CHANGELOG.md` que referencie el issue; verificar que los enlaces resuelvan y que los valores coincidan con el código

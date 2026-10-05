@@ -1,12 +1,12 @@
 ---
-# Defaults for project-zomboid-server-install.yml. Override with --extra-vars.
+# Valores por defecto de project-zomboid-server-install.yml. Reemplazar con --extra-vars.
 # -------------------------------------------------------------------------
-# Host / account
+# Host / cuenta
 # -------------------------------------------------------------------------
 pz_user: pzserver
 pz_home: "/home/{{ pz_user }}"
 
-# pzsvrtool: pin the tool itself; PZ game updates are managed separately.
+# pzsvrtool: se fija la versión de la herramienta; las actualizaciones del juego se gestionan aparte.
 pzsvrtool_version: "1.7.3"
 pzsvrtool_deb_url: >-
   https://github.com/Lu5ck/pzsvrtool/releases/download/{{ pzsvrtool_version }}/pzsvrtool.x86_64.deb
@@ -15,17 +15,17 @@ pzsvrtool_deb_path: "/tmp/pzsvrtool-{{ pzsvrtool_version }}.deb"
 # -------------------------------------------------------------------------
 # Project Zomboid
 # -------------------------------------------------------------------------
-# No spaces. Changing this later selects/creates another PZ server world.
+# Sin espacios. Cambiarlo después selecciona/crea otro mundo de PZ.
 pz_server_name: zomboid
 
-# Empty string = Steam stable/public branch.
-# Example beta value: "42.19"
+# Cadena vacía = rama estable/pública de Steam.
+# Ejemplo de valor beta: "42.19"
 pz_branch: ""
 
-# Root admin used by pzsvrtool on server startup.
-# Empty = generate a random password on first run and keep it in
-# pz_admin_password_file. A supplied value (--extra-vars / Vault) must be
-# >= 12 chars, not a known weak value, and contain no whitespace or '='.
+# Admin root que usa pzsvrtool al iniciar el servidor.
+# Vacía = generar una contraseña aleatoria en la primera ejecución y guardarla en
+# pz_admin_password_file. Un valor provisto (--extra-vars / Vault) tiene que tener
+# >= 12 caracteres, no ser un valor débil conocido y no contener espacios ni '='.
 pz_admin_name: pzadmin
 pz_admin_password: ""
 pz_admin_password_file: "{{ pz_home }}/pzsvrtool/.admin_password"
@@ -37,12 +37,12 @@ pz_admin_password_denylist:
   - pzadmin
   - CHANGE_ME_USE_ANSIBLE_VAULT
 
-# Keep the game's Java heap controlled by ProjectZomboid64.json; provide
-# host headroom with VM RAM plus swap instead of raising -Xmx.
+# El heap de Java del juego lo controla ProjectZomboid64.json; el margen del host
+# sale de la RAM de la VM más swap en lugar de subir -Xmx.
 pz_swap_file: /swapfile
 pz_swap_size_gb: 2
 
-# pzsvrtool behavior
+# Comportamiento de pzsvrtool
 pz_shutdown_countdown_minutes: 5
 pz_backup_enabled: true
 pz_backup_limit: 10
@@ -59,29 +59,29 @@ pz_udp_ports:
   - 8766
 
 # -------------------------------------------------------------------------
-# Automatic PZ updates
+# Actualizaciones automáticas de PZ
 # -------------------------------------------------------------------------
 pz_auto_update_enabled: true
 
-# Timer checks periodically, but maintenance only STARTS inside this window.
-# Supports normal windows (03:00-06:00) and crossing-midnight windows
+# El timer chequea periódicamente, pero el mantenimiento solo EMPIEZA dentro de esta ventana.
+# Admite ventanas normales (03:00-06:00) y que cruzan la medianoche
 # (23:00-02:00).
 pz_update_window_start: "03:00"
 pz_update_window_end: "06:00"
 pz_update_timezone: "America/Argentina/Buenos_Aires"
 
-# How frequently Steam is checked. Outside the window the check exits fast.
+# Cada cuánto se consulta Steam. Fuera de la ventana el chequeo sale enseguida.
 pz_update_check_minutes: 15
 
-# Player warning before shutting down for an actual game update.
+# Aviso a los jugadores antes de apagar por una actualización real del juego.
 pz_update_countdown_minutes: 5
 
-# Maximum time to wait for the graceful shutdown to complete.
+# Tiempo máximo de espera para que termine el apagado ordenado.
 pz_update_shutdown_timeout_minutes: 20
 
 # -------------------------------------------------------------------------
-# Basic host requirements
+# Requisitos básicos del host
 # -------------------------------------------------------------------------
-# 7500 MB leaves margin below the default t3.large (8 GiB), which reports ~7.7 GiB usable RAM.
+# 7500 MB deja margen bajo la t3.large por defecto (8 GiB), que informa ~7,7 GiB de RAM utilizable.
 pz_min_ram_mb: 7500
 pz_min_vcpus: 2

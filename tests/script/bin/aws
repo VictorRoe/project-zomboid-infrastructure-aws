@@ -1,5 +1,5 @@
 #!/bin/bash
-# Stub: records argv and returns canned IDs. Never contacts AWS.
+# Stub: registra argv y devuelve IDs fijos. Nunca contacta a AWS.
 printf 'aws %s\n' "$*" >> "$STUB_LOG"
 case "$1 $2" in
   "ec2 describe-volumes") echo "${STUB_VOLUME_ID:-vol-tagged}" ;;

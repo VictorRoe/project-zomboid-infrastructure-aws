@@ -1,70 +1,84 @@
-# Architecture
+# Arquitectura
 
-How the pieces of this repo fit together. Current values live in [spec.md](spec.md); the reasons behind them are in [decisions.md](decisions.md). Step-by-step sequences are in [flows.md](flows.md).
+Cómo encajan las piezas de este repo. Los valores actuales están en [spec.md](spec.md); los motivos, en [decisions.md](decisions.md). Las secuencias paso a paso están en [flows.md](flows.md).
 
-## Components
+## Componentes
 
-| Layer | Where | Responsibility |
+| Capa | Dónde | Responsabilidad |
 |---|---|---|
-| Terraform | `terraform/` | AWS resources: one security group, one EC2 instance with a single gp3 root disk |
-| Bootstrap | `terraform/templates/user_data.sh.tftpl` | Installs Ansible, clones (or updates, on a restored disk) this repo from GitHub, runs the playbook on the instance itself |
-| Ansible | `playbook/` | Host configuration: `pzserver` user, swap, pzsvrtool, game install, systemd user services, auto-update timer, UFW |
-| Backup/teardown | `script/destroy-and-backup.sh` | Runs on the operator's machine: stop server → snapshot root disk → record in S3 → `terraform destroy` |
+| Terraform | `terraform/` | Recursos de AWS: un security group y una instancia EC2 con un único disco raíz gp3 |
+| Arranque | `terraform/templates/user_data.sh.tftpl` | Instala Ansible, clona este repo desde GitHub (o lo actualiza, en un disco restaurado) y ejecuta el playbook en la propia instancia |
+| Ansible | `playbook/` | Configuración del host: usuario `pzserver`, swap, pzsvrtool, instalación del juego, servicios systemd de usuario, timer de actualización automática, UFW |
+| Backup/baja | `script/destroy-and-backup.sh` | Corre en la máquina del operador: detener el servidor → snapshot del disco raíz → registro en S3 → `terraform destroy` |
 
-There is no remote state, CI, or image pipeline. Terraform state is local to the operator's checkout.
+No hay estado remoto, CI ni pipeline de imágenes. El estado de Terraform es local, en el checkout del operador.
 
-## Diagram
+## Diagrama
 
 ```
- Operator machine                           AWS (aws_region)
+ Máquina del operador                       AWS (aws_region)
 ┌──────────────────────┐        ┌──────────────────────────────────────────────┐
 │ terraform apply      │──────▶ │ Security group pz-server-sg                  │
-│                      │        │  UDP 16261-16262, 8766 · TCP 22 (ssh CIDRs)  │
+│                      │        │  UDP 16261-16262, 8766 · TCP 22 (CIDRs ssh)  │
 │ destroy-and-backup.sh│        │                                              │
 │  ├─ terraform output │        │ EC2 PZ-Server-Instance (Ubuntu, t3.large)    │
-│  ├─ ssh ubuntu@ip ───┼──────▶ │  root gp3 30 GB, tag pz-world-data-root      │
+│  ├─ ssh ubuntu@ip ───┼──────▶ │  raíz gp3 30 GB, tag pz-world-data-root      │
 │  ├─ aws ec2 snapshot─┼──────▶ │   └─ cloud-init user_data                    │
-│  ├─ aws s3 cp ───────┼──┐     │       └─ git clone GitHub repo               │
+│  ├─ aws s3 cp ───────┼──┐     │       └─ git clone del repo de GitHub        │
 │  └─ terraform destroy│  │     │           └─ ansible-playbook (localhost)    │
 └──────────────────────┘  │     │                                              │
-                          │     │ EBS snapshots tag pz-world-data-snapshot     │
-                          └───▶ │ S3 bucket (external, not managed here)       │
+                          │     │ Snapshots EBS tag pz-world-data-snapshot     │
+                          └───▶ │ Bucket S3 (externo, no gestionado acá)       │
                                 └──────────────────────────────────────────────┘
 ```
 
-## On-host layout (after the playbook)
+## Estructura en el host (después del playbook)
 
 ```
 /home/pzserver/
 ├── pzsvrtool/
-│   ├── pzsvrtool.config          # server name, admin, backup settings (0600)
-│   ├── .admin_password           # root admin password, generated or supplied (0600)
-│   └── pz-auto-update.sh         # update checker (run by the user timer)
-├── pzserver/                     # game install (SteamCMD app 380870)
+│   ├── pzsvrtool.config          # nombre del servidor, admin, backups (0600)
+│   ├── .admin_password           # contraseña del admin root, generada o provista (0600)
+│   └── pz-auto-update.sh         # verificador de actualizaciones (lo corre el timer)
+├── pzserver/                     # instalación del juego (SteamCMD app 380870)
 ├── Steam/steamcmd.sh
 └── .config/systemd/user/
-    ├── pzsvrtool@<name>.service.d/keepalive.conf
+    ├── pzsvrtool@<nombre>.service.d/keepalive.conf
     ├── pz-auto-update.service
     └── pz-auto-update.timer
 /etc/systemd/system/user@<uid>.service.d/pzsvrtool.conf   # TimeoutStopSec=20m
 /swapfile                                                 # 2 GB
 ```
 
-The game runs as the **systemd user service** `pzsvrtool@<name>.service` of `pzserver`, kept alive at boot by **linger**. Any `systemctl --user` call from another account needs `XDG_RUNTIME_DIR=/run/user/<uid>` and the user D-Bus address.
+El juego corre como **servicio systemd de usuario** `pzsvrtool@<nombre>.service` de `pzserver`, y **linger** lo mantiene activo desde el arranque. Cualquier llamada a `systemctl --user` desde otra cuenta necesita `XDG_RUNTIME_DIR=/run/user/<uid>` y la dirección del D-Bus del usuario.
 
-## Coupling points
+## Puntos de acoplamiento
 
-- **Configuration** flows one way: Terraform variables → outputs → backup script, and → `user_data` → playbook (`pz_server_name`). Don't hardcode these values elsewhere.
-- **Ports** are declared twice: in the security group (`terraform/main.tf`) and in UFW (`pz_udp_ports` in the playbook). Keep them identical.
-- **Playbook delivery** is a `git clone` from GitHub at boot, so playbook changes only reach new instances after they are pushed to the default branch.
-- **Snapshot tag** `pz-world-data-snapshot` links the backup script (writer) and `main.tf` (reader, registers `aws_ami.restored` from it).
+- **Configuración:** fluye en un solo sentido: variables de Terraform → outputs → script de backup, y → `user_data` → playbook (`pz_server_name`). No hardcodear estos valores en otro lado.
+- **Puertos:** se declaran dos veces, en el security group (`terraform/main.tf`) y en UFW (`pz_udp_ports` en `playbook/vars/main.yml`). Tienen que coincidir.
+- **Entrega del playbook:** es un `git clone` desde GitHub al arrancar, así que los cambios al playbook solo llegan a instancias nuevas después de pushearlos a la rama por defecto.
+- **Tag de snapshot:** `pz-world-data-snapshot` conecta el script de backup (que lo escribe) con `main.tf` (que lo lee y registra `aws_ami.restored` a partir de él).
 
-## Known issues (as of 2026-10-04)
+## Problemas conocidos
 
-| Issue | Summary |
+### Resueltos en el PR #6 (2026-10-04)
+
+| Issue | Resumen |
 |---|---|
-| ~~[#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)~~ | Fixed: the instance is restored from the latest snapshot on create (D12) |
-| ~~[#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)~~ | Fixed: the script reads its configuration from Terraform outputs (D16) |
-| ~~[#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)~~ | Fixed: no default password; one is generated and persisted (D17) |
-| ~~[#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)~~ | Fixed: the AMI is resolved per region (D10) |
-| ~~[#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)~~ | Fixed: optional key pair; the backup aborts unless the stop is confirmed (D14) |
+| ~~[#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)~~ | Resuelto: al crearse, la instancia se restaura desde el último snapshot (D12) |
+| ~~[#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)~~ | Resuelto: el script lee su configuración de los outputs de Terraform (D16) |
+| ~~[#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)~~ | Resuelto: no hay contraseña por defecto; se genera una y se persiste (D17) |
+| ~~[#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)~~ | Resuelto: la AMI se resuelve por región (D10) |
+| ~~[#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)~~ | Resuelto: key pair opcional; el backup aborta si no se confirma la detención (D14) |
+
+### Abiertos (revisión del plan, 2026-10-04; ver D20)
+
+| Issue | Resumen | Prioridad |
+|---|---|---|
+| [#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7) | La `t3.large` (8 GiB, CPU burstable) no alcanza para FalopaServer (`-Xmx8g`, 257 mods); revisar también `pz_branch` | 1 |
+| [#8](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/8) | La configuración del servidor (ini, SandboxVars, mods) no está gestionada: vive solo en el disco | 2 |
+| [#9](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/9) | Reemplazar destroy/snapshot/restore por stop/start con Elastic IP (la IP cambia en cada sesión) | 3 |
+| [#10](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/10) | No hay backups mientras el servidor corre; los snapshots no tienen retención (DLM) | 3 |
+| [#13](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/13) | Sin contraseña de ingreso ni whitelist: cualquiera con la IP puede entrar | 4 |
+| [#11](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/11) | `sa-east-1` daría ~40 ms desde Argentina contra ~130–150 ms en `us-east-1` | — |
+| [#12](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/12) | Endurecimiento: backend remoto, bucket S3 redundante, versión fija del repo, SSH restringido | — |

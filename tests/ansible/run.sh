@@ -1,6 +1,6 @@
 #!/bin/bash
-# Offline tests for the playbook's admin password handling.
-# Checks are single-quoted on purpose: check() evals them after each run.
+# Tests offline del manejo de la contraseña de admin del playbook.
+# Los chequeos van entre comillas simples a propósito: check() los evalúa tras cada ejecución.
 # shellcheck disable=SC2016,SC2034
 set -uo pipefail
 
@@ -9,7 +9,7 @@ PLAY="$HERE/test_admin_password.yml"
 PASS=0
 FAIL=0
 
-# run_case <name> <home> [extra ansible args...]
+# run_case <nombre> <home> [args extra de ansible...]
 run_case() {
   CASE="$1"; HOME_DIR="$2"; shift 2
   PWFILE="$HOME_DIR/pzsvrtool/.admin_password"
@@ -23,7 +23,7 @@ check() {
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
-    echo "FAIL [$CASE] $1"
+    echo "FALLA [$CASE] $1"
     printf '%s\n' "$OUT" | sed 's/^/    | /'
   fi
 }
@@ -32,36 +32,36 @@ mode_of() { stat -c '%a' "$1"; }
 
 for weak in test Test PASSWORD changeme CHANGE_ME_USE_ANSIBLE_VAULT Short1 'abcdefgh=ijklmn' 'abcdefgh ijklmn'; do
   H="$(mktemp -d)"
-  run_case "rejects '$weak'" "$H" -e "pz_admin_password='$weak'"
-  check "fails" '[ "$RC" -ne 0 ]'
-  check "explains the rule" 'grep -q "at least 12 characters" <<<"$OUT"'
-  check "writes nothing" '[ ! -e "$PWFILE" ]'
+  run_case "rechaza '$weak'" "$H" -e "pz_admin_password='$weak'"
+  check "falla" '[ "$RC" -ne 0 ]'
+  check "explica la regla" 'grep -q "al menos 12 caracteres" <<<"$OUT"'
+  check "no escribe nada" '[ ! -e "$PWFILE" ]'
 done
 
 H="$(mktemp -d)"
 STRONG="Str0ngPassw0rd16"
-run_case "accepts strong password" "$H" -e "pz_admin_password=$STRONG"
-check "passes" '[ "$RC" -eq 0 ]'
-check "stores it" '[ "$(cat "$PWFILE")" = "$STRONG" ]'
-check "mode 0600" '[ "$(mode_of "$PWFILE")" = 600 ]'
-check "value not in output" '! grep -qF "$STRONG" <<<"$OUT"'
+run_case "acepta contraseña fuerte" "$H" -e "pz_admin_password=$STRONG"
+check "pasa" '[ "$RC" -eq 0 ]'
+check "la guarda" '[ "$(cat "$PWFILE")" = "$STRONG" ]'
+check "modo 0600" '[ "$(mode_of "$PWFILE")" = 600 ]'
+check "el valor no aparece en la salida" '! grep -qF "$STRONG" <<<"$OUT"'
 
 H="$(mktemp -d)"
-run_case "generates when empty" "$H"
+run_case "genera si está vacía" "$H"
 GEN="$(cat "$PWFILE" 2>/dev/null)"
-check "passes" '[ "$RC" -eq 0 ]'
-check "random alphanumeric >= 24 chars" '[[ "$GEN" =~ ^[A-Za-z0-9]{24,}$ ]]'
-check "mode 0600" '[ "$(mode_of "$PWFILE")" = 600 ]'
-check "used as effective password" 'grep -q "EFFECTIVE_LEN=${#GEN}" <<<"$OUT"'
-check "value not in output" '! grep -qF "$GEN" <<<"$OUT"'
+check "pasa" '[ "$RC" -eq 0 ]'
+check "aleatoria alfanumérica >= 24 caracteres" '[[ "$GEN" =~ ^[A-Za-z0-9]{24,}$ ]]'
+check "modo 0600" '[ "$(mode_of "$PWFILE")" = 600 ]'
+check "se usa como contraseña efectiva" 'grep -q "EFFECTIVE_LEN=${#GEN}" <<<"$OUT"'
+check "el valor no aparece en la salida" '! grep -qF "$GEN" <<<"$OUT"'
 
-run_case "reuses generated password" "$H"
-check "passes" '[ "$RC" -eq 0 ]'
-check "unchanged" '[ "$(cat "$PWFILE")" = "$GEN" ]'
+run_case "reutiliza la contraseña generada" "$H"
+check "pasa" '[ "$RC" -eq 0 ]'
+check "sin cambios" '[ "$(cat "$PWFILE")" = "$GEN" ]'
 
 H2="$(mktemp -d)"
-run_case "default is not 'test'" "$H2"
-check "generated value is not a denylisted default" '[ "$(cat "$PWFILE")" != test ]'
+run_case "el valor por defecto no es 'test'" "$H2"
+check "el valor generado no es un débil conocido" '[ "$(cat "$PWFILE")" != test ]'
 
-echo "ansible tests: $PASS passed, $FAIL failed"
+echo "tests de ansible: $PASS pasaron, $FAIL fallaron"
 [ "$FAIL" -eq 0 ]

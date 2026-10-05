@@ -11,7 +11,7 @@ variable "availability_zone" {
 
   validation {
     condition     = var.availability_zone == null || startswith(coalesce(var.availability_zone, "-"), var.aws_region)
-    error_message = "availability_zone must belong to aws_region (e.g. us-east-1a for us-east-1)."
+    error_message = "availability_zone tiene que pertenecer a aws_region (p. ej. us-east-1a para us-east-1)."
   }
 }
 
@@ -58,7 +58,7 @@ variable "ssh_key_name" {
 
   validation {
     condition     = !(var.ssh_key_name != "" && var.ssh_public_key != "")
-    error_message = "Set either ssh_public_key or ssh_key_name, not both."
+    error_message = "Definir ssh_public_key o ssh_key_name, no ambos."
   }
 }
 
@@ -75,6 +75,6 @@ variable "pz_server_name" {
 
   validation {
     condition     = can(regex("^[A-Za-z0-9._-]+$", var.pz_server_name))
-    error_message = "pz_server_name may only contain letters, digits, '.', '_' and '-'."
+    error_message = "pz_server_name solo puede contener letras, dígitos, '.', '_' y '-'."
   }
 }

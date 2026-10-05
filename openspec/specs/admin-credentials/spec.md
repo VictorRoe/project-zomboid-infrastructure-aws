@@ -1,38 +1,38 @@
 # admin-credentials Specification
 
 ## Purpose
-Ensures every provisioned Project Zomboid server has a strong, persistent root admin password that is never a shared default.
+Garantiza que cada servidor de Project Zomboid aprovisionado tenga una contraseña de administrador root robusta y persistente, que nunca sea un valor por defecto compartido.
 
 ## Requirements
 
-### Requirement: No default admin password
-Provisioning SHALL NOT configure a fixed default admin password. When no password is supplied, a random password of at least 24 alphanumeric characters SHALL be generated.
+### Requirement: Sin contraseña de administrador por defecto
+El aprovisionamiento NO DEBE (SHALL NOT) configurar una contraseña de administrador fija por defecto. Cuando no se suministre una contraseña, se DEBE (SHALL) generar una contraseña aleatoria de al menos 24 caracteres alfanuméricos.
 
-#### Scenario: Unattended first run
-- **WHEN** the playbook runs without `pz_admin_password`
-- **THEN** a random password is generated, written to the admin password file with mode 0600 owned by the server user, and used in the pzsvrtool config
+#### Scenario: Primera ejecución desatendida
+- **WHEN** el playbook se ejecuta sin `pz_admin_password`
+- **THEN** se genera una contraseña aleatoria, se escribe en el archivo de contraseña de administrador con modo 0600 y propietario el usuario del servidor, y se usa en la configuración de pzsvrtool
 
-### Requirement: Generated password persists
-A previously generated password SHALL be reused on subsequent runs rather than regenerated.
+### Requirement: La contraseña generada persiste
+Una contraseña generada previamente se DEBE (SHALL) reutilizar en las ejecuciones posteriores en lugar de regenerarse.
 
-#### Scenario: Re-run on restored disk
-- **WHEN** the admin password file already exists and no password is supplied
-- **THEN** the existing password is used unchanged
+#### Scenario: Nueva ejecución sobre un disco restaurado
+- **WHEN** el archivo de contraseña de administrador ya existe y no se suministra ninguna contraseña
+- **THEN** se usa la contraseña existente sin cambios
 
-### Requirement: Supplied password strength
-A supplied password SHALL be rejected, failing the run before any host changes, if it is shorter than 12 characters, matches a known weak value, or contains whitespace or `=`.
+### Requirement: Robustez de la contraseña suministrada
+Una contraseña suministrada se DEBE (SHALL) rechazar, haciendo fallar la ejecución antes de cualquier cambio en el host, si tiene menos de 12 caracteres, coincide con un valor débil conocido, o contiene espacios en blanco o `=`.
 
-#### Scenario: Weak value
-- **WHEN** `pz_admin_password=test` is supplied
-- **THEN** the run fails during validation with a message explaining the rule
+#### Scenario: Valor débil
+- **WHEN** se suministra `pz_admin_password=test`
+- **THEN** la ejecución falla durante la validación con un mensaje que explica la regla
 
-#### Scenario: Strong value
-- **WHEN** a 16-character password without whitespace or `=` is supplied
-- **THEN** validation passes and that password is used and written to the admin password file
+#### Scenario: Valor robusto
+- **WHEN** se suministra una contraseña de 16 caracteres sin espacios en blanco ni `=`
+- **THEN** la validación pasa y esa contraseña se usa y se escribe en el archivo de contraseña de administrador
 
-### Requirement: Secret hygiene
-The admin password SHALL NOT appear in task output, Terraform state or instance user data.
+### Requirement: Higiene de secretos
+La contraseña de administrador NO DEBE (SHALL NOT) aparecer en la salida de las tareas, en el estado de Terraform ni en los datos de usuario de la instancia.
 
-#### Scenario: Log output
-- **WHEN** the playbook runs with default verbosity
-- **THEN** no task output contains the password value
+#### Scenario: Salida de registros
+- **WHEN** el playbook se ejecuta con la verbosidad por defecto
+- **THEN** ninguna salida de tarea contiene el valor de la contraseña

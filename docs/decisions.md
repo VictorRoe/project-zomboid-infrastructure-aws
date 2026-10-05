@@ -1,62 +1,75 @@
-# Decision Log
+# Registro de decisiones
 
-Newest entries go at the bottom. Each entry records what was decided, why, and the consequences. The current state lives in [spec.md](spec.md).
+Las entradas nuevas van al final. Cada entrada registra qué se decidió, por qué y sus consecuencias. El estado actual está en [spec.md](spec.md).
 
-## Before 2026-10-04: Existing design (taken from the code)
+## Antes del 2026-10-04: diseño existente (deducido del código)
 
-**D1. One EC2 instance with a single root disk holds everything.** This is simple and cheap for a small group. Consequence: a backup means snapshotting the whole root disk, and world data can't be separated from the OS.
+**D1. Una sola instancia EC2 con un único disco raíz contiene todo.** Es simple y barato para un grupo chico. Consecuencia: un backup implica hacer snapshot de todo el disco raíz, y los datos del mundo no se pueden separar del SO.
 
-**D2. The instance configures itself (cloud-init clones the repo, then Ansible runs locally).** No SSH access or Ansible controller is needed. Consequence: the playbook comes from GitHub `main`, so unpushed changes never deploy.
+**D2. La instancia se configura sola (cloud-init clona el repo y Ansible corre localmente).** No hace falta acceso SSH ni un controlador de Ansible. Consecuencia: el playbook sale de `main` en GitHub, así que los cambios sin pushear nunca se despliegan.
 
-**D3. The game is managed by pzsvrtool (pinned 1.7.3) as a systemd user service with linger.** pzsvrtool provides tmux sessions, countdowns, backups and the install workflow. Consequences: every `systemctl --user` call needs the user bus environment, and the host-level `TimeoutStopSec=20m` gives the game time to save on shutdown.
+**D3. El juego lo gestiona pzsvrtool (versión fija 1.7.3) como servicio systemd de usuario con linger.** pzsvrtool aporta sesiones tmux, cuentas regresivas, backups y el flujo de instalación. Consecuencias: toda llamada a `systemctl --user` necesita el entorno del bus de usuario, y el `TimeoutStopSec=20m` a nivel host le da tiempo al juego para guardar al apagarse.
 
-**D4. Game updates happen only inside a time window, with a backup first and a recovery restart.** Players aren't kicked at peak hours, and a failed update doesn't leave the server down. Consequence: updates can be delayed by up to a day.
+**D4. Las actualizaciones del juego solo ocurren dentro de una ventana horaria, con un backup previo y un reinicio de recuperación.** No se echa a los jugadores en horario pico, y una actualización fallida no deja el servidor caído. Consecuencia: una actualización puede demorarse hasta un día.
 
-**D5. Destroy when idle and keep a snapshot.** This saves EC2 cost between play sessions. Consequence: restore is required for continuity, but it isn't wired yet ([#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)).
+**D5. Destruir cuando no se usa y conservar un snapshot.** Ahorra costo de EC2 entre sesiones de juego. Consecuencia: hace falta restaurar para tener continuidad, pero todavía no está conectado ([#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)). *Revisión 2026-10-04: stop/start lograría el mismo ahorro con menos complejidad; ver D20 y [#9](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/9).*
 
-**D6. The Java heap stays at the game default; extra headroom comes from swap and VM RAM.** Keeps the setup close to upstream. Consequence: the instance needs at least about 7.5 GB RAM (asserted).
+**D6. El heap de Java queda en el valor por defecto del juego; el margen extra sale del swap y de la RAM de la VM.** Mantiene la configuración cerca de upstream. Consecuencia: la instancia necesita al menos unos 7,5 GB de RAM (se verifica). *Revisión 2026-10-04: FalopaServer usa `-Xmx8g`; ver D20 y [#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7).*
 
-## 2026-10-04: Documentation and fix plan
+## 2026-10-04: documentación y plan de arreglos
 
-**D7. Documentation lives in `docs/`; only README, CLAUDE.md and CHANGELOG.md stay at the root.** Every change updates [spec.md](spec.md), adds an entry here, and adds a [CHANGELOG](../CHANGELOG.md) entry.
+**D7. La documentación vive en `docs/`; en la raíz solo quedan README, CLAUDE.md y CHANGELOG.md.** Cada cambio actualiza [spec.md](spec.md), agrega una entrada acá y una entrada en el [CHANGELOG](../CHANGELOG.md).
 
-**D8. Issues #1–#5 are fixed as OpenSpec changes on stacked branches**, in this order: AMI (#4) → restore (#1) → SSH (#5) → backup config (#2) → admin password (#3). The fixes touch the same files, so stacking avoids merge conflicts. Consequence: merge the branches in order.
+**D8. Los issues #1–#5 se arreglan como cambios de OpenSpec en ramas apiladas**, en este orden: AMI (#4) → restauración (#1) → SSH (#5) → configuración del backup (#2) → contraseña de admin (#3). Los arreglos tocan los mismos archivos, así que apilarlos evita conflictos de merge. *Reemplazada por D19: se entregó como un único PR y las ramas intermedias se borraron.*
 
-**D9. All tests run offline against mocks.** Terraform uses `terraform test` with `mock_provider`, Ansible runs on localhost, and the script runs with stubbed `aws`/`ssh`/`terraform`. Reason: no AWS spend or credentials during development. Consequence: real-AWS behavior (AMI filters, booting a restored image) still needs a manual check on the first real deploy.
+**D9. Todos los tests corren offline contra mocks.** Terraform usa `terraform test` con `mock_provider`, Ansible corre en localhost y el script corre con `aws`/`ssh`/`terraform` reemplazados por stubs. Motivo: sin gasto en AWS ni credenciales durante el desarrollo. Consecuencia: el comportamiento real en AWS (filtros de AMI, arranque de una imagen restaurada) todavía requiere una verificación manual en el primer despliegue real.
 
-**D10. The AMI is resolved per region, and image drift is ignored ([#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)).** A `data "aws_ami"` lookup finds the latest Canonical Ubuntu 24.04 amd64 gp3 image (`ami_id` overrides it). `availability_zone` defaults to `null`, and an explicit AZ must belong to `aws_region`. Why: the hardcoded AMI and AZ only worked in us-east-1. Consequences:
-- `lifecycle { ignore_changes = [ami] }` keeps a newer image from replacing the instance and deleting the world disk. Rebuilds are deliberate (`-replace`).
-- An existing instance keeps its original image.
-- `.terraform.lock.hcl` is now committed.
+**D10. La AMI se resuelve por región y se ignora la deriva de imagen ([#4](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/4)).** Un `data "aws_ami"` busca la última imagen Ubuntu 24.04 amd64 gp3 de Canonical (`ami_id` la reemplaza). `availability_zone` es `null` por defecto, y una AZ explícita tiene que pertenecer a `aws_region`. Por qué: la AMI y la AZ hardcodeadas solo funcionaban en us-east-1. Consecuencias:
+- `lifecycle { ignore_changes = [ami] }` evita que una imagen más nueva reemplace la instancia y borre el disco del mundo. Las reconstrucciones son deliberadas (`-replace`).
+- Una instancia existente conserva su imagen original.
+- `.terraform.lock.hcl` ahora se commitea.
 
-**D11. Offline test harness.** `make test` runs `terraform test` with `mock_provider "aws"`, `override_data` and the Ansible syntax check. Why: no AWS spend or credentials (D9). Consequence: the real AMI filter is only exercised on the first real apply.
+**D11. Arnés de tests offline.** `make test` corre `terraform test` con `mock_provider "aws"`, `override_data` y el chequeo de sintaxis de Ansible. Por qué: sin gasto ni credenciales de AWS (D9). Consecuencia: el filtro real de AMI recién se ejercita en el primer apply real.
 
-**D12. Restore by registering an image from the root snapshot ([#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)).** On create, `aws_ami.restored` is registered from the latest tagged snapshot (or `restore_snapshot_id`), and the instance boots from it. `restore_from_snapshot = false` opts out. Why: the backup is a full root-disk snapshot, and a root volume can only come from an image. A separate data volume would need a migration. Consequences:
-- Restore applies only on create (D10's `ignore_changes`), so a live server is never rolled back.
-- If a newer snapshot appears while the server runs, the next apply re-registers the image but leaves the instance alone.
-- Snapshots that aren't `completed` are rejected.
-- Destroy deregisters the image but keeps the snapshots.
-- The boot mode is set to `uefi-preferred` without testing on real AWS. Check it on the first real restore.
+**D12. Restaurar registrando una imagen desde el snapshot del disco raíz ([#1](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/1)).** Al crear, se registra `aws_ami.restored` desde el último snapshot con tag (o `restore_snapshot_id`) y la instancia arranca desde ella. `restore_from_snapshot = false` lo desactiva. Por qué: el backup es un snapshot de todo el disco raíz, y un volumen raíz solo puede salir de una imagen. Un volumen de datos separado requeriría una migración. Consecuencias:
+- La restauración solo aplica al crear (el `ignore_changes` de D10), así que un servidor en marcha nunca vuelve atrás.
+- Si aparece un snapshot más nuevo mientras el servidor corre, el siguiente apply vuelve a registrar la imagen pero no toca la instancia.
+- Se rechazan los snapshots que no están `completed`.
+- El destroy desregistra la imagen pero conserva los snapshots.
+- El modo de arranque se fijó en `uefi-preferred` sin probarlo en AWS real. Verificarlo en la primera restauración real.
 
-**D13. The boot script is idempotent and lives in a template.** `user_data` moved to `terraform/templates/user_data.sh.tftpl`. When the checkout exists, it runs `git fetch`/`reset` as `ubuntu`. Why: cloud-init re-runs `user_data` on a restored disk, and root-run git rejects a repo owned by `ubuntu`. Consequence: local changes on the server's checkout are discarded at boot. `make user-data-check` validates the rendered script.
+**D13. El script de arranque es idempotente y vive en una plantilla.** `user_data` pasó a `terraform/templates/user_data.sh.tftpl`. Si el checkout existe, ejecuta `git fetch`/`reset` como `ubuntu`. Por qué: cloud-init vuelve a ejecutar `user_data` en un disco restaurado, y git ejecutado como root rechaza un repo cuyo dueño es `ubuntu`. Consecuencia: los cambios locales en el checkout del servidor se descartan al arrancar. `make user-data-check` valida el script renderizado.
 
-**D14. Optional SSH key pair, and no snapshot of a running server ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).** Either `ssh_public_key` (creates key pair `pz-server`) or `ssh_key_name` can be set, never both. `ssh_allowed_cidrs` limits port 22. The backup script stops the service with the user bus environment, waits for the process to exit, and otherwise aborts before snapshotting. `FORCE_SNAPSHOT=1` is the escape hatch. Why: the instance had no key, the masked SSH failure snapshotted a live server, and `sudo -iu … systemctl --user` can't reach the user bus anyway. Consequences:
-- **Behavior change:** backups now fail loudly instead of continuing.
-- Host keys aren't pinned, because cloud-init regenerates them on every instance.
-- SSM Session Manager is a possible follow-up; it needs an IAM role.
+**D14. Key pair SSH opcional, y nunca un snapshot de un servidor en marcha ([#5](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/5)).** Se puede definir `ssh_public_key` (crea el key pair `pz-server`) o `ssh_key_name`, nunca ambos. `ssh_allowed_cidrs` limita el puerto 22. El script de backup detiene el servicio con el entorno del bus de usuario, espera a que el proceso termine y, si no lo logra, aborta antes del snapshot. `FORCE_SNAPSHOT=1` es la vía de escape. Por qué: la instancia no tenía clave, el fallo de SSH enmascarado hacía snapshot de un servidor en marcha, y `sudo -iu … systemctl --user` igual no llega al bus de usuario. Consecuencias:
+- **Cambio de comportamiento:** ahora los backups fallan de forma visible en lugar de continuar.
+- Las host keys no se fijan, porque cloud-init las regenera en cada instancia.
+- SSM Session Manager queda como posible mejora; necesita un rol de IAM.
 
-**D15. Script tests use PATH stubs rather than bats.** `tests/script/bin/{aws,ssh,terraform}` record their calls and follow `STUB_*` variables. Why: no extra dependency, and nothing touches AWS. Consequence: the stubs must follow any new CLI calls the script makes.
+**D15. Los tests del script usan stubs en el PATH en lugar de bats.** `tests/script/bin/{aws,ssh,terraform}` registran sus llamadas y responden según variables `STUB_*`. Por qué: sin dependencias extra, y nada toca AWS. Consecuencia: los stubs tienen que acompañar cualquier llamada nueva a una CLI que haga el script.
 
-**D16. Terraform outputs are the single source of configuration for the backup ([#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)).** The script reads `backup_bucket_name`, `aws_region`, `pz_server_name`, `public_ip` and `root_volume_id` via `terraform -chdir`, with env overrides, and fails fast on missing values. `pz_server_name` also reaches the playbook through `user_data`. Why: the bucket, region and service name differed between Terraform and the script, the script only worked from `terraform/`, and a tag lookup could pick a stale volume. Consequences:
-- Existing users must set `s3_bucket_name` to the bucket they actually use.
-- A globally exported `AWS_REGION` overrides the stack's region in the script.
-- The bucket stays unmanaged, because the script's own `terraform destroy` would delete it.
+**D16. Los outputs de Terraform son la única fuente de configuración del backup ([#2](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/2)).** El script lee `backup_bucket_name`, `aws_region`, `pz_server_name`, `public_ip` y `root_volume_id` con `terraform -chdir`, admite reemplazos por variables de entorno y falla temprano si falta un valor. `pz_server_name` también llega al playbook vía `user_data`. Por qué: el bucket, la región y el nombre del servicio diferían entre Terraform y el script, el script solo funcionaba desde `terraform/`, y una búsqueda por tag podía elegir un volumen viejo. Consecuencias:
+- Quien ya lo use tiene que definir `s3_bucket_name` con el bucket que usa de verdad.
+- Un `AWS_REGION` exportado globalmente reemplaza la región del stack en el script.
+- El bucket sigue sin gestionarse, porque el propio `terraform destroy` del script lo borraría.
 
-**D17. No default admin password; generate one on the host and keep it ([#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)).** If `pz_admin_password` is empty, which is the new default, a random 32-character alphanumeric password is generated and stored in `~pzserver/pzsvrtool/.admin_password` (0600). It is reused on later runs and survives a restore. A supplied password must be at least 12 characters, not denylisted, and free of whitespace and `=`. Why: unattended runs gave every public server the password `test`. Passing a password through Terraform or `user_data` would leak it into state and instance metadata. Consequences:
-- Operators read the password over SSH.
-- Changing the password after PZ has created the admin account may not take effect (the account is stored in PZ's database).
-- The validation assert uses `quiet` instead of `no_log`, so its error message is visible.
+**D17. Sin contraseña de admin por defecto; se genera una en el host y se conserva ([#3](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/3)).** Si `pz_admin_password` está vacía, que es el nuevo valor por defecto, se genera una contraseña alfanumérica aleatoria de 32 caracteres y se guarda en `~pzserver/pzsvrtool/.admin_password` (0600). Se reutiliza en ejecuciones posteriores y sobrevive a una restauración. Una contraseña provista tiene que tener al menos 12 caracteres, no estar en la lista de débiles y no contener espacios ni `=`. Por qué: las ejecuciones desatendidas dejaban a todo servidor público con la contraseña `test`. Pasar una contraseña por Terraform o `user_data` la filtraría al estado y a los metadatos de la instancia. Consecuencias:
+- Los operadores leen la contraseña por SSH.
+- Cambiar la contraseña después de que PZ creó la cuenta de admin puede no tener efecto (la cuenta vive en la base de datos de PZ).
+- El assert de validación usa `quiet` en lugar de `no_log`, así que su mensaje de error es visible.
 
-**D18. Playbook defaults moved to `playbook/vars/main.yml`, and validation and password logic to `playbook/tasks/`.** Why: the test playbook (`tests/ansible/`) loads the same defaults and tasks without root or a real host. Consequence: `vars_files` has the same precedence as the old inline `vars`, and `--extra-vars` still wins.
+**D18. Los valores por defecto del playbook pasaron a `playbook/vars/main.yml`, y la validación y la lógica de contraseña, a `playbook/tasks/`.** Por qué: el playbook de tests (`tests/ansible/`) carga los mismos valores y tareas sin root ni host real. Consecuencia: `vars_files` tiene la misma precedencia que los `vars` en línea anteriores, y `--extra-vars` sigue ganando.
 
-**D19. OpenSpec lives in the repo, and the fixes ship as one PR.** `openspec/` moved from the parent working directory into the repo: main specs in `openspec/specs/`, the six archived changes in `openspec/changes/archive/2026-10-04-*`. The stacked branches (D8) are delivered as a single PR, `release/fix-issues-1-5`. Why: the maintainer asked for decisions, changes, specs and the changelog to be merged together, and specs should be version-controlled next to the code they describe. Consequence: every future change adds its OpenSpec artifacts to the PR.
+**D19. OpenSpec vive en el repo, y los arreglos se entregan en un único PR.** `openspec/` se movió desde el directorio de trabajo padre al repo: specs principales en `openspec/specs/`, los seis cambios archivados en `openspec/changes/archive/2026-10-04-*`. Las ramas apiladas (D8) se entregaron como un único PR, `release/fix-issues-1-5`, y las intermedias se borraron. Por qué: el mantenedor pidió mergear juntos decisiones, cambios, specs y changelog, y las specs deben versionarse junto al código que describen. Consecuencia: cada cambio futuro agrega sus artefactos de OpenSpec al PR.
+
+**D20. Revisión del plan como servidor de Zomboid: hallazgos registrados como issues.** La revisión de consistencia no encontró contradicciones entre código, docs y specs, pero sí problemas de fondo del plan. Quedaron registrados así:
+- [#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7): la `t3.large` (8 GiB, CPU burstable) no alcanza para FalopaServer (`-Xmx8g`, 257 mods).
+- [#8](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/8): la configuración del servidor no está gestionada.
+- [#9](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/9): stop/start con Elastic IP en lugar de destroy/restore.
+- [#10](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/10): snapshots automáticos con retención (DLM).
+- [#13](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/13): sin contraseña de ingreso ni whitelist.
+- [#11](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/11): región `sa-east-1` para jugadores en Argentina.
+- [#12](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/12): endurecimiento (backend remoto, bucket redundante, versión fija del repo, SSH).
+
+Por qué: que no se pierdan. Consecuencia: el orden sugerido es #7 → #8 → #9/#10 → #13. Cada uno se trabaja como un cambio de OpenSpec propio.
+
+**D21. Toda la documentación y los artefactos de OpenSpec están en castellano.** Los marcadores estructurales de OpenSpec quedan en inglés (`## Purpose`, `### Requirement:`, `#### Scenario:`, `WHEN`/`THEN`) y los requisitos usan "DEBE (SHALL)", porque el validador exige esas palabras clave. Los identificadores, comandos y rutas no se traducen. Por qué: lo pidió el mantenedor. Consecuencia: `openspec/config.yaml` indica escribir los artefactos nuevos en castellano.

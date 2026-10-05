@@ -1,15 +1,15 @@
 # Tasks
 
-## 1. Terraform outputs and server name
+## 1. Outputs de Terraform y nombre del servidor
 
-- [x] 1.1 Add `pz_server_name` variable (validated by regex) and outputs `backup_bucket_name`, `aws_region`, `pz_server_name`; pass `-e pz_server_name=` in the user_data template; verify `make tf-test` with an assertion on outputs and rendered user_data
+- [x] 1.1 Agregar la variable `pz_server_name` (validada por regex) y los outputs `backup_bucket_name`, `aws_region`, `pz_server_name`; pasar `-e pz_server_name=` en la plantilla de user_data; verificar con `make tf-test` con una aserción sobre los outputs y el user_data renderizado
 
-## 2. Script configuration
+## 2. Configuración del script
 
-- [x] 2.1 Resolve `TF_DIR`, read outputs with env overrides, fail fast on empty values; verify script tests for outputs, override and missing-bucket scenarios
-- [x] 2.2 Use `root_volume_id` output, mktemp metadata file, parameterized service name; verify script test asserts `create-snapshot --volume-id <output>` and `pzsvrtool@<name>.service`
-- [x] 2.3 Verify the script runs from repo root and from `/tmp` in tests (cwd independence)
+- [x] 2.1 Resolver `TF_DIR`, leer los outputs con sobrescritura por entorno, fallar rápido ante valores vacíos; verificar con pruebas del script para outputs, sobrescritura y escenarios de bucket faltante
+- [x] 2.2 Usar el output `root_volume_id`, archivo de metadatos con mktemp, nombre de servicio parametrizado; verificar que la prueba del script afirme `create-snapshot --volume-id <output>` y `pzsvrtool@<name>.service`
+- [x] 2.3 Verificar que el script se ejecute desde la raíz del repo y desde `/tmp` en las pruebas (independencia del cwd)
 
-## 3. Docs and changelog
+## 3. Documentación y changelog
 
-- [x] 3.1 Update `docs/spec.md`, `docs/architecture.md`/`docs/flows.md` where affected, append a dated decision entry to `docs/decisions.md`, and add an `[Unreleased]` entry to `CHANGELOG.md` referencing the issue; verify links resolve and values match the code
+- [x] 3.1 Actualizar `docs/spec.md`, `docs/architecture.md`/`docs/flows.md` donde corresponda, agregar una entrada de decisión con fecha a `docs/decisions.md` y una entrada `[Unreleased]` en `CHANGELOG.md` que referencie el issue; verificar que los enlaces resuelvan y que los valores coincidan con el código

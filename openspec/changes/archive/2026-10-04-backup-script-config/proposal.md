@@ -1,26 +1,26 @@
 # Proposal
 
-## Why
+## Por qué
 
-The backup script and Terraform disagree on basic configuration: `var.s3_bucket_name` (`zomboid-bucket-backup`) is unused while the script hardcodes `tu-bucket-zomboid-backups`; the region and server name (`zomboid`) are hardcoded too, and the script only works when run from inside `terraform/` (VictorRoe/project-zomboid-infrastructure-aws#2). It also picks the volume by tag with `Volumes[0]`, which can match a stale volume.
+El script de backup y Terraform discrepan en la configuración básica: `var.s3_bucket_name` (`zomboid-bucket-backup`) no se usa mientras el script tiene fijo `tu-bucket-zomboid-backups`; la región y el nombre del servidor (`zomboid`) también están fijos, y el script solo funciona cuando se ejecuta desde dentro de `terraform/` (VictorRoe/project-zomboid-infrastructure-aws#2). Además elige el volumen por etiqueta con `Volumes[0]`, lo que puede coincidir con un volumen obsoleto.
 
-## What Changes
+## Qué cambia
 
-- Terraform becomes the single source of truth: new outputs `backup_bucket_name`, `aws_region`, `pz_server_name`; new variable `pz_server_name` (default `zomboid`) passed to the playbook via `user_data`.
-- Script reads those outputs with `terraform -chdir=<repo>/terraform`, so it runs from any directory; env vars (`S3_BUCKET`, `AWS_REGION`, `PZ_SERVER_NAME`, `TF_DIR`) override.
-- Script uses the `root_volume_id` output instead of a tag query.
-- Snapshot metadata written via a temp file instead of leaving `snapshot_meta.txt` in the cwd.
-- Script tests extended (stubbed tools only).
+- Terraform pasa a ser la única fuente de verdad: nuevos outputs `backup_bucket_name`, `aws_region`, `pz_server_name`; nueva variable `pz_server_name` (por defecto `zomboid`) pasada al playbook mediante `user_data`.
+- El script lee esos outputs con `terraform -chdir=<repo>/terraform`, por lo que se ejecuta desde cualquier directorio; las variables de entorno (`S3_BUCKET`, `AWS_REGION`, `PZ_SERVER_NAME`, `TF_DIR`) los sobrescriben.
+- El script usa el output `root_volume_id` en lugar de una consulta por etiqueta.
+- Los metadatos del snapshot se escriben mediante un archivo temporal en lugar de dejar `snapshot_meta.txt` en el cwd.
+- Pruebas del script ampliadas (solo con herramientas simuladas).
 
-## Capabilities
+## Capacidades
 
-### New Capabilities
-- `world-backup`: how the pre-destroy backup resolves its configuration and records snapshot metadata.
+### Capacidades nuevas
+- `world-backup`: cómo el backup previo al destroy resuelve su configuración y registra los metadatos del snapshot.
 
-### Modified Capabilities
+### Capacidades modificadas
 
-## Impact
+## Impacto
 
-- `terraform/variable.tf`, `output.tf`, user_data template; `script/destroy-and-backup.sh`; `tests/script/`.
-- The S3 bucket stays **unmanaged** by this stack (otherwise `terraform destroy` at the end of the script would delete it); it must exist beforehand.
-- Stacked on `instance-ssh-access`.
+- `terraform/variable.tf`, `output.tf`, plantilla de user_data; `script/destroy-and-backup.sh`; `tests/script/`.
+- El bucket S3 permanece **sin administrar** por este stack (de lo contrario el `terraform destroy` al final del script lo eliminaría); debe existir de antemano.
+- Apilado sobre `instance-ssh-access`.

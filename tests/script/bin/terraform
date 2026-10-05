@@ -1,6 +1,6 @@
 #!/bin/bash
-# Stub: records argv. `output -raw NAME` prints STUB_TF_OUT_<NAME> or a default;
-# names listed in STUB_TF_MISSING fail like a missing output.
+# Stub: registra argv. `output -raw NOMBRE` imprime STUB_TF_OUT_<NOMBRE> o un valor por defecto;
+# los nombres listados en STUB_TF_MISSING fallan como un output inexistente.
 printf 'terraform %s\n' "$*" >> "$STUB_LOG"
 args=("$@")
 [[ "${args[0]}" == -chdir=* ]] && args=("${args[@]:1}")

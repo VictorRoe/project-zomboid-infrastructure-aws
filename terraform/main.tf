@@ -22,7 +22,7 @@ data "aws_ebs_snapshot" "latest_zomboid_snapshot" {
   }
 }
 
-# Canonical's Ubuntu Server 24.04 LTS image for the configured region.
+# Imagen Ubuntu Server 24.04 LTS de Canonical para la región configurada.
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
@@ -46,7 +46,7 @@ data "aws_ami" "ubuntu" {
 locals {
   base_ami_id = var.ami_id != "" ? var.ami_id : data.aws_ami.ubuntu.id
 
-  # Restore source: explicit snapshot > latest tagged snapshot > none.
+  # Origen de la restauración: snapshot explícito > último snapshot con tag > ninguno.
   latest_snapshot_id  = length(data.aws_ebs_snapshot.latest_zomboid_snapshot) > 0 ? data.aws_ebs_snapshot.latest_zomboid_snapshot[0].id : ""
   restore_snapshot_id = !var.restore_from_snapshot ? "" : (var.restore_snapshot_id != "" ? var.restore_snapshot_id : local.latest_snapshot_id)
   restoring           = local.restore_snapshot_id != ""
@@ -70,8 +70,8 @@ data "aws_ebs_snapshot" "restore" {
   snapshot_ids = [local.restore_snapshot_id]
 }
 
-# Image registered from the backup snapshot of the old root disk. Destroy
-# deregisters it; the snapshot itself is not managed and stays.
+# Imagen registrada desde el snapshot de backup del disco raíz anterior. El destroy
+# la desregistra; el snapshot no se gestiona acá y queda.
 resource "aws_ami" "restored" {
   count               = local.restoring ? 1 : 0
   name                = "pz-restore-${local.restore_snapshot_id}"
@@ -95,7 +95,7 @@ resource "aws_ami" "restored" {
   lifecycle {
     precondition {
       condition     = data.aws_ebs_snapshot.restore[0].state == "completed"
-      error_message = "Snapshot ${local.restore_snapshot_id} is not completed yet; wait for it before restoring."
+      error_message = "El snapshot ${local.restore_snapshot_id} todavía no está completo; esperar antes de restaurar."
     }
   }
 }
@@ -139,7 +139,7 @@ resource "aws_security_group" "pz_sg" {
   }
 }
 
-# 5. Instancia EC2 con script de User Data
+# Instancia EC2 con script de User Data
 resource "aws_instance" "pz_server" {
   ami                    = local.instance_ami_id
   instance_type          = var.instance_type
@@ -163,8 +163,8 @@ resource "aws_instance" "pz_server" {
     Name = "PZ-Server-Instance"
   }
 
-  # The root disk holds the world: a new image must never replace a running
-  # server implicitly. Rebuild deliberately with -replace after a backup.
+  # El disco raíz contiene el mundo: una imagen nueva nunca debe reemplazar un
+  # servidor en marcha implícitamente. Reconstruir a propósito con -replace tras un backup.
   lifecycle {
     ignore_changes = [ami]
   }

@@ -1,53 +1,61 @@
 # Spec
 
-Current target state of the stack. Update this file with every change and record the reason in [decisions.md](decisions.md).
+Estado objetivo actual del stack. Actualizar este archivo con cada cambio y registrar el motivo en [decisions.md](decisions.md).
 
 ## AWS (Terraform)
 
-| Item | Value |
+| Ítem | Valor |
 |---|---|
-| Region / AZ | `aws_region` = `us-east-1`; `availability_zone` = `null` (AWS picks one in the region; an explicit AZ must belong to `aws_region`) |
-| Instance | `instance_type` = `t3.large`, tag `Name=PZ-Server-Instance` |
-| Image | Latest Canonical Ubuntu Server 24.04 LTS amd64 (gp3) in `aws_region`, or `ami_id` if set. AMI changes are ignored on an existing instance (`ignore_changes = [ami]`) |
-| Disk | Single root gp3 volume, 30 GB (or snapshot size if larger), `delete_on_termination=true`, tag `Name=pz-world-data-root` |
-| Security group | `pz-server-sg`: UDP 16261–16262 and 8766 from `0.0.0.0/0`; TCP 22 from `ssh_allowed_cidrs` (default `0.0.0.0/0`); all egress allowed |
-| SSH key | Optional: `ssh_public_key` creates key pair `pz-server`, or `ssh_key_name` uses an existing one (mutually exclusive); none by default |
-| Backups | EBS snapshots tagged `pz-world-data-snapshot`; S3 bucket `s3_bucket_name` = `zomboid-bucket-backup`. It must already exist and isn't managed by this stack |
-| Restore | On instance creation, if `restore_from_snapshot` (default `true`) and a snapshot exists: register `pz-restore-<snap>` image from the latest tagged snapshot (or `restore_snapshot_id`), boot from it; root size `max(30, snapshot size)`; snapshot must be `completed` |
-| Server name | `pz_server_name` = `zomboid` (regex `^[A-Za-z0-9._-]+$`), passed to the playbook via `user_data` (`-e pz_server_name=`) |
+| Región / AZ | `aws_region` = `us-east-1`; `availability_zone` = `null` (AWS elige una dentro de la región; una AZ explícita tiene que pertenecer a `aws_region`) |
+| Instancia | `instance_type` = `t3.large`, tag `Name=PZ-Server-Instance` (insuficiente para FalopaServer, ver [#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)) |
+| Imagen | Última Ubuntu Server 24.04 LTS amd64 (gp3) de Canonical en `aws_region`, o `ami_id` si está definida. Los cambios de AMI se ignoran en una instancia existente (`ignore_changes = [ami]`) |
+| Disco | Un único volumen raíz gp3 de 30 GB (o el tamaño del snapshot si es mayor), `delete_on_termination=true`, tag `Name=pz-world-data-root` |
+| Security group | `pz-server-sg`: UDP 16261–16262 y 8766 desde `0.0.0.0/0`; TCP 22 desde `ssh_allowed_cidrs` (por defecto `0.0.0.0/0`); todo el egreso permitido |
+| Clave SSH | Opcional: `ssh_public_key` crea el key pair `pz-server`, o `ssh_key_name` usa uno existente (son excluyentes); ninguna por defecto |
+| Backups | Snapshots EBS con tag `pz-world-data-snapshot`; bucket S3 `s3_bucket_name` = `zomboid-bucket-backup`. Tiene que existir de antemano y este stack no lo gestiona |
+| Restauración | Al crear la instancia, si `restore_from_snapshot` (por defecto `true`) y existe un snapshot: registra la imagen `pz-restore-<snap>` desde el último snapshot con tag (o `restore_snapshot_id`) y arranca desde ella; tamaño raíz `max(30, tamaño del snapshot)`; el snapshot tiene que estar `completed` |
+| Nombre del servidor | `pz_server_name` = `zomboid` (regex `^[A-Za-z0-9._-]+$`), se pasa al playbook vía `user_data` (`-e pz_server_name=`) |
 | Outputs | `public_ip`, `root_volume_id`, `restored_from_snapshot_id`, `backup_bucket_name`, `aws_region`, `pz_server_name` |
-| State | Local, no backend |
-| Tooling | Terraform `>= 1.9`, AWS provider `~> 6.0`, lock file committed |
+| Estado | Local, sin backend |
+| Herramientas | Terraform `>= 1.9`, provider de AWS `~> 6.0`, lock file commiteado |
 
 ## Tests (offline)
 
-`make test` runs `terraform fmt/validate/test` against a mocked AWS provider and the Ansible syntax check. No AWS credentials or API calls are needed. Suites: `terraform/tests/{ami,restore,ssh,config}.tftest.hcl`; `make script-test` runs `tests/script/run.sh` (backup script with stubbed `aws`/`ssh`/`terraform`) plus shellcheck; `make ansible-test` runs `tests/ansible/run.sh` (password validation and generation on localhost); `make user-data-check` renders the boot script and runs `bash -n` + shellcheck.
+`make test` corre todo sin credenciales de AWS ni llamadas a la API:
 
-## Backup script
+- `make tf-test`: `terraform fmt/validate/test` contra un provider de AWS simulado (mock). Suites: `terraform/tests/{ami,restore,ssh,config}.tftest.hcl`.
+- `make user-data-check`: renderiza el script de arranque y corre `bash -n` + shellcheck.
+- `make script-test`: `tests/script/run.sh` (script de backup con `aws`/`ssh`/`terraform` reemplazados por stubs) + shellcheck.
+- `make ansible-check`: chequeo de sintaxis del playbook.
+- `make ansible-test`: `tests/ansible/run.sh` (validación y generación de la contraseña en localhost).
 
-| Item | Value |
+## Script de backup
+
+| Ítem | Valor |
 |---|---|
-| Config | Taken from Terraform outputs (`terraform -chdir=<repo>/terraform`); overridden by `S3_BUCKET`, `AWS_REGION`, `PZ_SERVER_NAME`, `TF_DIR`. Fails before any action if a value is missing |
-| Disk | `root_volume_id` output |
-| Metadata | `s3://<bucket>/latest/snapshot_meta.txt` (previous `latest/` copied to `archive/<date>/`) |
-| Stop | `systemctl --user stop pzsvrtool@<pz_server_name>.service` as `pzserver` with `XDG_RUNTIME_DIR`, then poll until no `ProjectZomboid` process remains |
-| Stop timeout | `STOP_TIMEOUT` = 600 s; poll every `POLL_INTERVAL` = 5 s |
-| On failure | Abort before the snapshot (exit 1). `FORCE_SNAPSHOT=1` continues with a warning |
-| SSH | `ubuntu@<public_ip>`, `SSH_KEY` identity file, `BatchMode`, no host-key pinning |
+| Configuración | Sale de los outputs de Terraform (`terraform -chdir=<repo>/terraform`); `S3_BUCKET`, `AWS_REGION`, `PZ_SERVER_NAME` y `TF_DIR` la reemplazan. Falla antes de cualquier acción si falta un valor |
+| Disco | Output `root_volume_id` |
+| Metadatos | `s3://<bucket>/latest/snapshot_meta.txt` (el `latest/` anterior se copia a `archive/<fecha>/`) |
+| Detención | `systemctl --user stop pzsvrtool@<pz_server_name>.service` como `pzserver` con `XDG_RUNTIME_DIR`; después consulta hasta que no quede proceso `ProjectZomboid` |
+| Tiempo de espera | `STOP_TIMEOUT` = 600 s; consulta cada `POLL_INTERVAL` = 5 s |
+| Si falla | Aborta antes del snapshot (exit 1). `FORCE_SNAPSHOT=1` sigue con una advertencia |
+| SSH | `ubuntu@<public_ip>`, archivo de identidad `SSH_KEY`, `BatchMode`, sin fijar la host key |
 
 ## Host (Ansible)
 
-Defaults live in `playbook/vars/main.yml`; validation is in `playbook/tasks/validate.yml`, and admin password handling in `playbook/tasks/admin_password.yml`.
+Los valores por defecto están en `playbook/vars/main.yml`; la validación, en `playbook/tasks/validate.yml`, y el manejo de la contraseña de admin, en `playbook/tasks/admin_password.yml`.
 
-| Item | Value |
+| Ítem | Valor |
 |---|---|
-| OS requirement | Debian family, x86_64, ≥ 2 vCPU, ≥ 7500 MB RAM |
-| Service account | `pzserver`, home `/home/pzserver`, linger on |
-| pzsvrtool | `1.7.3` (pinned `.deb`) |
-| Server name | `pz_server_name` (default `zomboid`; Terraform passes its value) |
-| Steam branch | public (`pz_branch: ""`) |
-| Admin | `pzadmin`. Password: supplied via `-e pz_admin_password` (≥ 12 chars, not denylisted, no whitespace/`=`), or a random 32-char alphanumeric one generated on first run. Either way it's stored in `/home/pzserver/pzsvrtool/.admin_password` (0600, `pzserver`) and reused |
+| Requisitos del SO | Familia Debian, x86_64, ≥ 2 vCPU, ≥ 7500 MB de RAM |
+| Cuenta de servicio | `pzserver`, home `/home/pzserver`, linger activo |
+| pzsvrtool | `1.7.3` (`.deb` con versión fija) |
+| Nombre del servidor | `pz_server_name` (por defecto `zomboid`; Terraform pasa su valor) |
+| Rama de Steam | pública (`pz_branch: ""`; revisar contra la build del servidor, ver [#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)) |
+| Admin | `pzadmin`. Contraseña: provista con `-e pz_admin_password` (≥ 12 caracteres, fuera de la lista de débiles, sin espacios ni `=`) o una aleatoria alfanumérica de 32 caracteres generada en la primera ejecución. En ambos casos se guarda en `/home/pzserver/pzsvrtool/.admin_password` (0600, `pzserver`) y se reutiliza |
+| Contraseña de ingreso | Ninguna, ni whitelist (ver [#13](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/13)) |
+| Configuración del juego | No gestionada (ini, SandboxVars, mods; ver [#8](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/8)) |
 | Swap | `/swapfile`, 2 GB |
-| Backups (pzsvrtool) | enabled, limit 10; shutdown countdown 5 min |
-| Auto-update | enabled; window 03:00–06:00 `America/Argentina/Buenos_Aires`; check every 15 min; 5 min warning; 20 min shutdown timeout |
+| Backups (pzsvrtool) | activados, límite 10; cuenta regresiva de apagado 5 min |
+| Actualización automática | activada; ventana 03:00–06:00 `America/Argentina/Buenos_Aires`; chequeo cada 15 min; aviso de 5 min; tiempo máximo de apagado 20 min |
 | Firewall | UFW: TCP 22, UDP 16261, 16262, 8766 |

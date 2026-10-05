@@ -6,8 +6,8 @@ apt-get install -y python3-pip git software-properties-common
 add-apt-repository --yes --update ppa:ansible/ansible
 apt-get install -y ansible
 
-# On a disk restored from a snapshot the checkout already exists. Git runs as
-# ubuntu because it refuses repos owned by another user ("dubious ownership").
+# En un disco restaurado desde un snapshot el checkout ya existe. Git corre como
+# ubuntu porque rechaza repos de otro usuario ("dubious ownership").
 if [ -d ${repo_dir}/.git ]; then
   runuser -u ubuntu -- git -C ${repo_dir} fetch origin ${repo_branch}
   runuser -u ubuntu -- git -C ${repo_dir} reset --hard origin/${repo_branch}

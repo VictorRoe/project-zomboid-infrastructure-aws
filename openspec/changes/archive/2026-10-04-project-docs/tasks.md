@@ -1,8 +1,8 @@
 # Tasks
 
-## 1. Documentation baseline
+## 1. Línea base de documentación
 
-- [x] 1.1 Write `docs/architecture.md` and `docs/flows.md` describing the current (pre-fix) system, including known issues #1–#5; verify every file/resource named exists in the repo
-- [x] 1.2 Write `docs/spec.md` and `docs/operations.md` from current variables/defaults; verify values match `variable.tf` and playbook vars
-- [x] 1.3 Write `docs/decisions.md` seeded with D1… for existing design choices; verify each entry has decision, why, consequences
-- [x] 1.4 Add `CHANGELOG.md` (Keep a Changelog, `[Unreleased]`), expand README with overview + docs links, commit `CLAUDE.md` with a docs pointer; verify all relative links resolve
+- [x] 1.1 Escribir `docs/architecture.md` y `docs/flows.md` describiendo el sistema actual (previo a las correcciones), incluidos los problemas conocidos #1–#5; verificar que cada archivo/recurso nombrado exista en el repositorio
+- [x] 1.2 Escribir `docs/spec.md` y `docs/operations.md` a partir de las variables/valores por defecto actuales; verificar que los valores coincidan con `variable.tf` y las variables del playbook
+- [x] 1.3 Escribir `docs/decisions.md` inicializado con D1… para las decisiones de diseño existentes; verificar que cada entrada tenga decisión, motivo y consecuencias
+- [x] 1.4 Agregar `CHANGELOG.md` (Keep a Changelog, `[Unreleased]`), ampliar el README con descripción general + enlaces a docs, confirmar `CLAUDE.md` con un puntero a la documentación; verificar que todos los enlaces relativos se resuelvan

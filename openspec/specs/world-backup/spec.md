@@ -1,38 +1,38 @@
 # world-backup Specification
 
 ## Purpose
-Defines how the pre-destroy backup procedure obtains its configuration and targets the correct server disk and backup bucket.
+Define cómo el procedimiento de respaldo previo a la destrucción obtiene su configuración y apunta al disco del servidor y al bucket de respaldo correctos.
 
 ## Requirements
 
-### Requirement: Single source of configuration
-The backup procedure SHALL take bucket name, region and server name from the stack's outputs, and SHALL let `S3_BUCKET`, `AWS_REGION` and `PZ_SERVER_NAME` environment variables override each value.
+### Requirement: Única fuente de configuración
+El procedimiento de respaldo DEBE (SHALL) tomar el nombre del bucket, la región y el nombre del servidor de los outputs del stack, y DEBE (SHALL) permitir que las variables de entorno `S3_BUCKET`, `AWS_REGION` y `PZ_SERVER_NAME` sobrescriban cada valor.
 
-#### Scenario: Values from outputs
-- **WHEN** the stack outputs `backup_bucket_name = "b1"`, `aws_region = "sa-east-1"`, `pz_server_name = "w1"` and no overrides are set
-- **THEN** the script stops `pzsvrtool@w1.service`, calls AWS in `sa-east-1` and writes metadata to `s3://b1/`
+#### Scenario: Valores tomados de los outputs
+- **WHEN** el stack expone `backup_bucket_name = "b1"`, `aws_region = "sa-east-1"`, `pz_server_name = "w1"` y no hay sobrescrituras
+- **THEN** el script detiene `pzsvrtool@w1.service`, llama a AWS en `sa-east-1` y escribe los metadatos en `s3://b1/`
 
-#### Scenario: Environment override
-- **WHEN** `S3_BUCKET=override` is set
-- **THEN** metadata is written to `s3://override/` regardless of the output
+#### Scenario: Sobrescritura por variable de entorno
+- **WHEN** se define `S3_BUCKET=override`
+- **THEN** los metadatos se escriben en `s3://override/` sin importar el output
 
-### Requirement: Runs from any directory
-The backup procedure SHALL locate the Terraform configuration relative to its own location (or `TF_DIR`), independent of the caller's working directory.
+### Requirement: Se ejecuta desde cualquier directorio
+El procedimiento de respaldo DEBE (SHALL) ubicar la configuración de Terraform de forma relativa a su propia ubicación (o mediante `TF_DIR`), independientemente del directorio de trabajo de quien lo invoca.
 
-#### Scenario: Run from repo root
-- **WHEN** the script is invoked as `script/destroy-and-backup.sh` from the repository root
-- **THEN** all Terraform commands target `terraform/`
+#### Scenario: Ejecución desde la raíz del repositorio
+- **WHEN** el script se invoca como `script/destroy-and-backup.sh` desde la raíz del repositorio
+- **THEN** todos los comandos de Terraform apuntan a `terraform/`
 
-### Requirement: Exact disk targeting
-The backup procedure SHALL snapshot the volume reported by the stack's `root_volume_id` output.
+### Requirement: Selección exacta del disco
+El procedimiento de respaldo DEBE (SHALL) crear el snapshot del volumen indicado por el output `root_volume_id` del stack.
 
-#### Scenario: Stale tagged volume exists
-- **WHEN** another volume also carries the tag `pz-world-data-root`
-- **THEN** the snapshot is created from the `root_volume_id` volume only
+#### Scenario: Existe un volumen etiquetado obsoleto
+- **WHEN** otro volumen también lleva la etiqueta `pz-world-data-root`
+- **THEN** el snapshot se crea únicamente a partir del volumen `root_volume_id`
 
-### Requirement: Fail fast on missing configuration
-The backup procedure SHALL exit non-zero before stopping the server if the bucket, region, server name, instance IP or volume ID cannot be resolved (including a missing Terraform output).
+### Requirement: Falla rápida ante configuración faltante
+El procedimiento de respaldo DEBE (SHALL) salir con código distinto de cero antes de detener el servidor si no se puede resolver el bucket, la región, el nombre del servidor, la IP de la instancia o el ID del volumen (incluido un output de Terraform faltante).
 
-#### Scenario: No bucket configured
-- **WHEN** the bucket resolves to an empty value
-- **THEN** the script exits non-zero and makes no SSH or AWS calls
+#### Scenario: Sin bucket configurado
+- **WHEN** el bucket se resuelve a un valor vacío
+- **THEN** el script sale con código distinto de cero y no realiza llamadas SSH ni a AWS

@@ -1,4 +1,4 @@
-# Offline: the AWS provider is mocked.
+# Offline: el provider de AWS está simulado.
 mock_provider "aws" {}
 
 override_data {
@@ -19,12 +19,12 @@ run "outputs_expose_backup_config" {
 
   assert {
     condition     = output.backup_bucket_name == "b1" && output.aws_region == "sa-east-1" && output.pz_server_name == "w1"
-    error_message = "Backup configuration must be exposed as outputs for the script."
+    error_message = "La configuración del backup tiene que exponerse como outputs para el script."
   }
 
   assert {
     condition     = strcontains(aws_instance.pz_server.user_data, "-e pz_server_name=w1")
-    error_message = "The server name must be passed to the playbook."
+    error_message = "El nombre del servidor tiene que pasarse al playbook."
   }
 }
 

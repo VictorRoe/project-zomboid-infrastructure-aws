@@ -1,4 +1,4 @@
-# Offline: the AWS provider is mocked.
+# Offline: el provider de AWS está simulado.
 mock_provider "aws" {}
 
 override_data {
@@ -8,14 +8,14 @@ override_data {
   }
 }
 
-# key_name is optional+computed, so with no value it is unknown at plan time;
-# assert on the local that feeds it instead.
+# key_name es opcional+computado: sin valor es desconocido en el plan;
+# por eso se verifica el local que lo alimenta.
 run "no_key_by_default" {
   command = plan
 
   assert {
     condition     = local.key_name == null && length(aws_key_pair.pz) == 0
-    error_message = "Without SSH inputs no key pair is created or attached."
+    error_message = "Sin variables SSH no se crea ni se asocia ningún key pair."
   }
 }
 
@@ -28,7 +28,7 @@ run "public_key_creates_pair" {
 
   assert {
     condition     = length(aws_key_pair.pz) == 1 && aws_instance.pz_server.key_name == "pz-server"
-    error_message = "ssh_public_key must create the pz-server key pair and attach it."
+    error_message = "ssh_public_key tiene que crear el key pair pz-server y asociarlo."
   }
 }
 
@@ -41,7 +41,7 @@ run "existing_key_name" {
 
   assert {
     condition     = aws_instance.pz_server.key_name == "ops" && length(aws_key_pair.pz) == 0
-    error_message = "ssh_key_name must be attached without creating a key pair."
+    error_message = "ssh_key_name tiene que asociarse sin crear un key pair."
   }
 }
 
@@ -68,6 +68,6 @@ run "ssh_ingress_restricted" {
       for r in aws_security_group.pz_sg.ingress :
       r.from_port == 22 && toset(r.cidr_blocks) == toset(["203.0.113.4/32"])
     ])
-    error_message = "Port 22 must only allow ssh_allowed_cidrs."
+    error_message = "El puerto 22 solo debe permitir ssh_allowed_cidrs."
   }
 }
