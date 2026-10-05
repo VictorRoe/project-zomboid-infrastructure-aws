@@ -81,7 +81,7 @@ script/pz-ctl.sh status
 - **Automáticos:** DLM toma un snapshot diario (`backup_time_utc`, 09:00 UTC por defecto) y conserva `backup_retain_count` (7). Se etiquetan `Name=pz-world-data-snapshot-auto` y `pz-consistency=crash`: si el juego estaba corriendo, son *crash-consistent* (como un corte de luz). La restauración automática no los elige, así que hay que pasarlos a mano.
 - **Consistente a pedido:** `script/pz-ctl.sh backup` detiene el juego, hace el snapshot (`pz-world-data-snapshot`, `pz-consistency=application`) y lo vuelve a iniciar (con la EC2 detenida, no hace falta detener nada). Conviene antes de cambios grandes.
 - Listar: `aws ec2 describe-snapshots --owner-ids self --filters Name=tag:pz-server,Values=<nombre> --query 'Snapshots[].[SnapshotId,StartTime,Tags[?Key==\`Name\`].Value|[0]]' --output table`.
-- Objetivos: pérdida máxima de hasta 24 h (RPO) con los automáticos, o la del último backup consistente. Tiempo de recuperación (RTO) objetivo: 1 hora (apply + arranque + aprovisionamiento; medido en la VM: ~5 min sin descargar el juego).
+- Objetivos: pérdida máxima de hasta 24 h (RPO) con los automáticos, o la del último backup consistente. Tiempo de recuperación (RTO) objetivo: 1 hora (apply + arranque + aprovisionamiento; sin medir todavía en AWS).
 
 ### Configuración del juego
 

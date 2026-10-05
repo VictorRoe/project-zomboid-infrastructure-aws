@@ -1,9 +1,4 @@
-# server-bootstrap Specification
-
-## Purpose
-Define de dónde obtiene la instancia el código de configuración (repositorio y rama) que ejecuta en su primer arranque y en cada arranque de una instancia nueva.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Repositorio y rama configurables
 El arranque DEBE (SHALL) obtener del repositorio `repo_url` el commit exacto `repo_commit` (alcanzable desde `repo_branch` o por SHA), y DEBE (SHALL) seguir la punta de `repo_branch` solo cuando `repo_follow_branch` es verdadero, como modo de prueba explícito. Valores por defecto: el repositorio de GitHub del proyecto y la rama `main`.
@@ -16,12 +11,7 @@ El arranque DEBE (SHALL) obtener del repositorio `repo_url` el commit exacto `re
 - **WHEN** se planifica con `repo_follow_branch = true`, `repo_commit = ""` y `repo_branch = "feat/x"`
 - **THEN** el arranque usa la punta de `feat/x` y lo advierte como mutable
 
-### Requirement: Rama válida
-El stack DEBE (SHALL) rechazar en el plan un `repo_branch` con caracteres fuera de `[A-Za-z0-9._/-]`.
-
-#### Scenario: Rama con caracteres inválidos
-- **WHEN** `repo_branch = "main; rm -rf /"`
-- **THEN** la planificación falla con un error de validación
+## ADDED Requirements
 
 ### Requirement: Revisión exacta obligatoria
 El stack DEBE (SHALL) rechazar en el plan un `repo_commit` que no sea un SHA completo de 40 caracteres hexadecimales en minúscula, salvo en modo rama, y DEBE (SHALL) rechazar que se definan ambos.
