@@ -148,8 +148,13 @@
       ansible.builtin.get_url:
         url: "{{ pzsvrtool_deb_url }}"
         dest: "{{ pzsvrtool_deb_path }}"
+        checksum: "sha256:{{ pzsvrtool_deb_sha256 }}"
         mode: "0644"
         force: false
+      register: pz_deb_download
+      retries: 5
+      delay: 10
+      until: pz_deb_download is succeeded
 
     - name: Install pzsvrtool package
       ansible.builtin.apt:

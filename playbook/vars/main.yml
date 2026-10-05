@@ -11,6 +11,9 @@ pzsvrtool_version: "1.7.3"
 pzsvrtool_deb_url: >-
   https://github.com/Lu5ck/pzsvrtool/releases/download/{{ pzsvrtool_version }}/pzsvrtool.x86_64.deb
 pzsvrtool_deb_path: "/tmp/pzsvrtool-{{ pzsvrtool_version }}.deb"
+# Con el checksum, un .deb ya descargado no se vuelve a pedir (reaprovisionar no depende de
+# GitHub) y uno alterado se rechaza. Actualizarlo junto con pzsvrtool_version.
+pzsvrtool_deb_sha256: "175744fdd3004bf1992419f593bbbb91ee83aaded798078b5e7f40f9e8238d62"
 
 # -------------------------------------------------------------------------
 # Project Zomboid
