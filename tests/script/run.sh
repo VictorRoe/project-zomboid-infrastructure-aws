@@ -60,6 +60,10 @@ check "snapshot creado" 'called "ec2 create-snapshot"'
 
 run_case "clave ssh" SSH_KEY=/keys/pz.pem
 check "usa el archivo de identidad" 'called "-i /keys/pz.pem"'
+check "puerto 22 por defecto" 'called "-p 22"'
+
+run_case "puerto ssh" SSH_PORT=2222
+check "usa el puerto indicado" 'called "-p 2222" && ! called "-p 22 "'
 
 # --- backup-script-config (#2) ---
 

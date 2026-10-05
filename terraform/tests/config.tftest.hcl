@@ -37,3 +37,35 @@ run "invalid_server_name_rejected" {
 
   expect_failures = [var.pz_server_name]
 }
+
+run "repo_defaults" {
+  command = plan
+
+  assert {
+    condition     = strcontains(aws_instance.pz_server.user_data, "git clone --branch main https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git")
+    error_message = "Por defecto se tiene que clonar main del repositorio del proyecto."
+  }
+}
+
+run "custom_branch" {
+  command = plan
+
+  variables {
+    repo_branch = "feat/x"
+  }
+
+  assert {
+    condition     = strcontains(aws_instance.pz_server.user_data, "git clone --branch feat/x") && strcontains(aws_instance.pz_server.user_data, "reset --hard origin/feat/x")
+    error_message = "repo_branch tiene que usarse tanto al clonar como al actualizar."
+  }
+}
+
+run "invalid_branch_rejected" {
+  command = plan
+
+  variables {
+    repo_branch = "main; rm -rf /"
+  }
+
+  expect_failures = [var.repo_branch]
+}

@@ -78,3 +78,25 @@ variable "pz_server_name" {
     error_message = "pz_server_name solo puede contener letras, dígitos, '.', '_' y '-'."
   }
 }
+
+variable "repo_url" {
+  type        = string
+  default     = "https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git"
+  description = "Repositorio que la instancia clona al arrancar para correr el playbook"
+
+  validation {
+    condition     = can(regex("^https://[A-Za-z0-9._/-]+$", var.repo_url))
+    error_message = "repo_url tiene que ser una URL https sin espacios ni caracteres especiales."
+  }
+}
+
+variable "repo_branch" {
+  type        = string
+  default     = "main"
+  description = "Rama del repositorio que la instancia clona y actualiza al arrancar"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._/-]+$", var.repo_branch))
+    error_message = "repo_branch solo puede contener letras, dígitos, '.', '_', '/' y '-'."
+  }
+}

@@ -13,7 +13,7 @@ FORCE_SNAPSHOT="${FORCE_SNAPSHOT:-0}"
 
 # cloud-init regenera las host keys en cada instancia nueva (también al restaurar),
 # así que no se fija known_hosts para la IP recién creada.
-SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o BatchMode=yes)
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o BatchMode=yes -p "${SSH_PORT:-22}")
 if [ -n "${SSH_KEY:-}" ]; then
   SSH_OPTS+=(-i "$SSH_KEY")
 fi

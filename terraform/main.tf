@@ -57,8 +57,8 @@ locals {
   key_name = length(aws_key_pair.pz) > 0 ? aws_key_pair.pz[0].key_name : (var.ssh_key_name != "" ? var.ssh_key_name : null)
 
   user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
-    repo_url    = "https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git"
-    repo_branch = "main"
+    repo_url    = var.repo_url
+    repo_branch = var.repo_branch
     repo_dir    = "/home/ubuntu/repo"
     server_name = var.pz_server_name
   })

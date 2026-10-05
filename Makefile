@@ -33,3 +33,33 @@ ansible-check:
 ansible-test:
 	@if command -v shellcheck >/dev/null; then shellcheck tests/ansible/run.sh; fi
 	tests/ansible/run.sh
+
+# VM local que imita la EC2 (QEMU/KVM, sin AWS). Ver docs/operations.md.
+.PHONY: local-up local-ssh local-check local-reboot-test local-restore-test local-backup-test local-test local-down local-clean
+
+local-up:
+	local/vm.sh up
+
+local-ssh:
+	local/vm.sh ssh
+
+local-check:
+	local/vm.sh check
+
+local-reboot-test:
+	local/vm.sh reboot-test
+
+local-restore-test:
+	local/vm.sh restore-test
+
+local-backup-test:
+	local/vm.sh backup-test
+
+# Ciclo completo: aprovisionar, reiniciar, backup y restaurar.
+local-test: local-up local-reboot-test local-backup-test local-restore-test
+
+local-down:
+	local/vm.sh down
+
+local-clean:
+	local/vm.sh clean
