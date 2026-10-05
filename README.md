@@ -18,12 +18,14 @@ Una EC2 Ubuntu 24.04, del tamaño que define el tier, con un único disco gp3 qu
 
 Se elige un tier en `terraform.tfvars` (`tier = "estandar"` por defecto). Cada uno fija la instancia, el heap de Java y el disco; cualquier variable explícita lo reemplaza. USD por mes en `us-east-1`, sin impuestos, con precios del 2026-10-05:
 
-| Tier | Recomendado para | Instancia | Heap | Disco | 60 h de juego/mes | 24/7 |
-|---|---|---|---|---|---|---|
-| `minimo` | Probar, 1–2 jugadores sin mods | `t3.medium` (4 GiB, burstable) | 2 GB | 30 GB | ~9 | ~37 |
-| `estandar` | Grupo chico, pocos mods | `m7i.large` (8 GiB) | 4 GB | 30 GB | **~12,70** | ~80 |
-| `robusto` | Muchos mods (~250), 4–8 jugadores | `r7i.large` (16 GiB) | 8 GB | 50 GB | ~17 | ~105 |
-| `grande` | Muchos mods, más jugadores y CPU | `m7i.xlarge` (4 vCPU, 16 GiB) | 10 GB | 60 GB | ~22 | ~157 |
+| Tier | Recomendado para | Instancia | vCPU | RAM | Heap del juego (`-Xmx`) | Disco | 60 h de juego/mes | 24/7 |
+|---|---|---|---|---|---|---|---|---|
+| `minimo` | Probar, 1–2 jugadores sin mods | `t3.medium` (burstable) | 2 | 4 GiB | 2 GB | 30 GB | ~9 | ~37 |
+| `estandar` | Grupo chico, pocos mods | `m7i.large` | 2 | 8 GiB | 4 GB | 30 GB | **~12,70** | ~80 |
+| `robusto` | Muchos mods (~250), 4–8 jugadores | `r7i.large` | 2 | 16 GiB | 8 GB | 50 GB | ~17 | ~105 |
+| `grande` | Muchos mods, más jugadores y CPU | `m7i.xlarge` | 4 | 16 GiB | 10 GB | 60 GB | ~22 | ~157 |
+
+La RAM es la memoria de la instancia. El heap es lo que puede usar Java para el juego: el resto queda para el SO, la memoria propia de Java y pzsvrtool (el plan verifica que RAM ≥ heap + margen).
 
 La EC2 se cobra solo mientras está encendida (`pz-ctl.sh stop` entre sesiones). El disco, la Elastic IP (3,65) y los snapshots se cobran siempre: unos 6,65 USD/mes detenido en `estandar`. Después de `destroy-and-backup.sh` quedan solo los snapshots (~0,60). En `sa-east-1` la latencia desde Argentina es mucho menor (~34 ms contra ~166 ms), pero cuesta ~60 % más. Desglose, criterios para elegir tier, comparación de regiones y fuentes: [docs/costs.md](docs/costs.md).
 

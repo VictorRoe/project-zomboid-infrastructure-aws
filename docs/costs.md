@@ -24,12 +24,12 @@ IAM, el security group y el bucket del estado (unos KB) no tienen costo relevant
 
 `tier` elige un perfil coherente de instancia, heap, margen de RAM y disco. Cualquier variable explícita (`instance_type`, `pz_java_xmx_mb`, `pz_host_overhead_mb`, `root_volume_size_gb`) gana sobre el tier, y el plan igual verifica que la RAM alcance. Los snapshots automáticos son iguales en todos: uno por día con la instancia prendida, y se conservan 4 (`backup_retain_count`).
 
-| Tier | Para qué | Instancia | Heap / margen (MB) | Disco | USD/mes, 60 h de juego | USD/mes, 24/7 |
-|---|---|---|---|---|---|---|
-| `minimo` | Probar o levantar el server; 1–2 jugadores sin mods | `t3.medium` (2 vCPU, 4 GiB, burstable) | 2048 / 1536 | 30 GB | ~9,05 | ~37 |
-| `estandar` (por defecto) | Grupo chico, pocos mods | `m7i.large` (2 vCPU, 8 GiB) | 4096 / 3072 | 30 GB | ~12,70 | ~80 |
-| `robusto` | Muchos mods (~250), 4–8 jugadores | `r7i.large` (2 vCPU, 16 GiB) | 8192 / 3072 | 50 GB | ~16,85 | ~105 |
-| `grande` | Muchos mods, más jugadores y CPU | `m7i.xlarge` (4 vCPU, 16 GiB) | 10240 / 3072 | 60 GB | ~22,05 | ~157 |
+| Tier | Para qué | Instancia | vCPU | RAM | Heap / margen (MB) | Disco | USD/mes, 60 h de juego | USD/mes, 24/7 |
+|---|---|---|---|---|---|---|---|---|
+| `minimo` | Probar o levantar el server; 1–2 jugadores sin mods | `t3.medium` (burstable) | 2 | 4 GiB | 2048 / 1536 | 30 GB | ~9,05 | ~37 |
+| `estandar` (por defecto) | Grupo chico, pocos mods | `m7i.large` | 2 | 8 GiB | 4096 / 3072 | 30 GB | ~12,70 | ~80 |
+| `robusto` | Muchos mods (~250), 4–8 jugadores | `r7i.large` | 2 | 16 GiB | 8192 / 3072 | 50 GB | ~16,85 | ~105 |
+| `grande` | Muchos mods, más jugadores y CPU | `m7i.xlarge` | 4 | 16 GiB | 10240 / 3072 | 60 GB | ~22,05 | ~157 |
 
 Cómo se calcula, en us-east-1: EC2 (horas × precio), más disco gp3, Elastic IP (3,65) y snapshots, que se cobran todo el mes. Se estiman unos 10, 12, 25 y 30 GB guardados en snapshots: son incrementales, así que los 4 ocupan poco más que uno. Por ejemplo, `estandar` con 60 h: EC2 6,05 + gp3 2,40 + EIP 3,65 + snapshots ~0,60 = ~12,70. La transferencia de un grupo chico entra en los 100 GB/mes sin cargo.
 
