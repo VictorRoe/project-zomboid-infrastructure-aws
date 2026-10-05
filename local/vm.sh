@@ -3,7 +3,11 @@
 # imagen cloud que AWS y le pasa por cloud-init (NoCloud) el user_data que
 # renderiza Terraform, sin cambios. No usa AWS. Ver docs/operations.md.
 #
-# Uso: local/vm.sh up|ssh|wait|check|reboot-test|restore-test|backup-test|down|clean
+# Uso: local/vm.sh up|ssh|wait|check|config-test|reboot-test|restore-test|backup-test|down|clean
+#
+# La VM clona este repo desde un servidor git HTTP en el host (10.0.2.2 dentro de QEMU)
+# con el commit actual fijado (repo_commit = HEAD), así que no hace falta pushear ni que
+# el repo sea público. LOCAL_REPO_SOURCE=github clona desde GitHub (rama pusheada).
 #
 # Los comandos remotos van entre comillas simples a propósito: se expanden en la VM.
 # shellcheck disable=SC2016
@@ -18,7 +22,11 @@ DISK="$STATE/disk.qcow2"
 SEED="$STATE/seed.iso"
 KEY="$STATE/id_ed25519"
 PIDFILE="$STATE/qemu.pid"
+GIT_PIDFILE="$STATE/git-http.pid"
 TF="${TF:-terraform}"
+GIT_PORT="${LOCAL_GIT_PORT:-8730}"
+REPO_SOURCE="${LOCAL_REPO_SOURCE:-local}"
+FIXTURE="$REPO/tests/ansible/fixtures/world1"
 
 SSH_PORT="${LOCAL_SSH_PORT:-2222}"
 VM_MEM="${LOCAL_VM_MEM:-10240}"
@@ -85,22 +93,48 @@ ensure_key() {
   [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C pz-local-vm -f "$KEY"
 }
 
-# La VM clona la rama desde GitHub: tiene que estar pusheada.
-repo_branch() {
-  local branch
-  branch="${LOCAL_REPO_BRANCH:-$(git -C "$REPO" rev-parse --abbrev-ref HEAD)}"
-  git -C "$REPO" fetch -q origin "$branch" || die "la rama '$branch' no existe en origin; pushearla primero"
-  if [ -n "$(git -C "$REPO" log --oneline "origin/$branch..HEAD" 2>/dev/null)" ]; then
-    die "hay commits sin pushear en '$branch'; la VM clona desde GitHub"
+git_running() { [ -f "$GIT_PIDFILE" ] && kill -0 "$(cat "$GIT_PIDFILE")" 2>/dev/null; }
+
+# Sirve un espejo del repo por HTTP "dumb" en 127.0.0.1 (la VM lo ve en 10.0.2.2).
+serve_repo() {
+  [ "$REPO_SOURCE" = local ] || return 0
+  rm -rf "$STATE/git/repo.git"
+  mkdir -p "$STATE/git"
+  git clone -q --mirror "$REPO" "$STATE/git/repo.git"
+  git -C "$STATE/git/repo.git" update-server-info
+  if ! git_running; then
+    python3 -m http.server "$GIT_PORT" --bind 127.0.0.1 --directory "$STATE/git" >"$STATE/git-http.log" 2>&1 &
+    echo $! > "$GIT_PIDFILE"
   fi
-  printf '%s' "$branch"
+}
+
+stop_git() {
+  git_running && kill "$(cat "$GIT_PIDFILE")" 2>/dev/null
+  rm -f "$GIT_PIDFILE"
+}
+
+# Revisión que va a ejecutar la VM: el commit actual (sin cambios sin commitear en lo rastreado).
+repo_commit() {
+  [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] \
+    || die "hay cambios sin commitear: la VM ejecuta el commit actual (repo_commit = HEAD)"
+  if [ "$REPO_SOURCE" = github ]; then
+    local branch
+    branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD)"
+    git -C "$REPO" fetch -q origin "$branch" || die "la rama '$branch' no existe en origin; pushearla primero"
+    [ -z "$(git -C "$REPO" log --oneline "origin/$branch..HEAD")" ] || die "hay commits sin pushear en '$branch'"
+  fi
+  git -C "$REPO" rev-parse HEAD
 }
 
 render_user_data() {
-  local branch="$1"
-  "$TF" -chdir="$REPO/terraform" init -backend=false -input=false >/dev/null
-  echo 'local.user_data' | "$TF" -chdir="$REPO/terraform" console -var "repo_branch=$branch" \
-    | sed '1d;$d' > "$STATE/user_data.sh"
+  local commit="$1"
+  local args=(-var "repo_commit=$commit" -var "pz_server_name=$PZ_SERVER_NAME")
+  if [ "$REPO_SOURCE" = local ]; then
+    args+=(-var "repo_url=http://10.0.2.2:$GIT_PORT/repo.git" -var "repo_branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD)")
+  else
+    args+=(-var "repo_branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD)")
+  fi
+  TF="$TF" "$REPO/tests/render-user-data.sh" "${args[@]}" > "$STATE/user_data.sh"
   bash -n "$STATE/user_data.sh"
 }
 
@@ -193,11 +227,12 @@ cmd_up() {
   require_tools
   ensure_image
   ensure_key
+  serve_repo
   if [ ! -f "$DISK" ]; then
-    local branch
-    branch="$(repo_branch)"
-    log "Rama que va a clonar la VM: $branch"
-    render_user_data "$branch"
+    local commit
+    commit="$(repo_commit)"
+    log "Commit que va a ejecutar la VM: $commit ($REPO_SOURCE)"
+    render_user_data "$commit"
     qemu-img create -q -f qcow2 -F qcow2 -b "$BASE" "$DISK" "$DISK_SIZE"
     make_seed "i-local-$(date +%s)"
   fi
@@ -207,20 +242,85 @@ cmd_up() {
   cmd_check
 }
 
+# Sin configuración subida el juego espera (pz_wait_for_config); con ella, tiene que correr.
 cmd_check() {
   FAILS=0
+  local ini="/home/pzserver/Zomboid/Server/$PZ_SERVER_NAME.ini" head
+  head="$(git -C "$REPO" rev-parse HEAD)"
   expect "cloud-init terminó sin errores" vm_ssh 'cloud-init status | grep -q "status: done"'
+  expect "revisión fija verificada (commit=HEAD del repo)" vm_ssh "sudo grep -qx 'commit=$head' /var/lib/pz-provision/revision && sudo grep -qx 'mode=pinned' /var/lib/pz-provision/revision"
+  expect "checkout en ese commit" vm_ssh "[ \"\$(git -C /home/ubuntu/repo rev-parse HEAD)\" = $head ]"
   expect "servicio habilitado" vm_ssh "[ \"\$($PZ_USER_ENV systemctl --user is-enabled pzsvrtool@$PZ_SERVER_NAME.service)\" = enabled ]"
-  expect "servicio activo" svc "is-active --quiet pzsvrtool@$PZ_SERVER_NAME.service"
-  expect "proceso ProjectZomboid corriendo" wait_game
-  expect "escucha en 16261/udp" wait_port
   expect "linger activo" vm_ssh '[ "$(loginctl show-user pzserver -p Linger --value)" = yes ]'
   expect "timer de actualización activo" svc "is-active --quiet pz-auto-update.timer"
   expect "contraseña de admin 0600 de pzserver" vm_ssh '[ "$(sudo stat -c "%a %U" /home/pzserver/pzsvrtool/.admin_password)" = "600 pzserver" ]'
   expect "contraseña de admin de 24+ caracteres" vm_ssh '[ "$(sudo cat /home/pzserver/pzsvrtool/.admin_password | wc -c)" -ge 24 ]'
   expect "config de pzsvrtool usa esa contraseña" vm_ssh 'sudo grep -qxF "pzRootAdminPassword=$(sudo cat /home/pzserver/pzsvrtool/.admin_password)" /home/pzserver/pzsvrtool/pzsvrtool.config'
+  expect "contraseña de ingreso 0600, 24 caracteres, distinta de la de admin" vm_ssh 'J=/home/pzserver/pzsvrtool/.join_password; [ "$(sudo stat -c "%a %U" $J)" = "600 pzserver" ] && [ "$(sudo cat $J | wc -c)" -eq 24 ] && ! sudo cmp -s $J /home/pzserver/pzsvrtool/.admin_password'
+  expect "el .ini tiene la contraseña de ingreso antes de admitir jugadores" vm_ssh "sudo grep -qxF \"Password=\$(sudo cat /home/pzserver/pzsvrtool/.join_password)\" $ini"
+  expect "heap fijado en ProjectZomboid64.json" vm_ssh 'sudo grep -q "\"-Xmx4096m\"" /home/pzserver/pzserver/ProjectZomboid64.json'
   expect "UFW activo con 16261/udp" vm_ssh 'sudo ufw status | grep -q "16261/udp.*ALLOW"'
+  if vm_ssh 'sudo test -f /home/pzserver/pzsvrtool/config-applied.json || sudo test -d /home/pzserver/Zomboid/Saves/Multiplayer/'"$PZ_SERVER_NAME"; then
+    expect "servicio activo" svc "is-active --quiet pzsvrtool@$PZ_SERVER_NAME.service"
+    expect "proceso ProjectZomboid corriendo" wait_game
+    expect "escucha en 16261/udp" wait_port
+  else
+    log "Sin configuración subida: el juego tiene que esperar (correr config-test)."
+    expect "el juego no arrancó sin configuración" vm_ssh '! pgrep -u pzserver -f ProjectZomboid >/dev/null'
+    expect "no se creó ningún mundo" vm_ssh "! sudo test -d /home/pzserver/Zomboid/Saves/Multiplayer/$PZ_SERVER_NAME"
+  fi
   finish "check"
+}
+
+# Entorno para correr los scripts del operador contra la VM: SSH real, aws/terraform simulados.
+ops_env() {
+  OPS_BIN="$(mktemp -d)"
+  ln -s "$REPO/tests/script/bin/aws" "$REPO/tests/script/bin/terraform" "$OPS_BIN/"
+  export STUB_DIR="$OPS_BIN" STUB_LOG="$OPS_BIN/calls.log"
+  : > "$STUB_LOG"
+  OPS_ENV=(PATH="$OPS_BIN:$PATH" SSH_PORT="$SSH_PORT" SSH_KEY="$KEY"
+    STUB_TF_OUT_public_ip=127.0.0.1 STUB_TF_OUT_pz_server_name="$PZ_SERVER_NAME"
+    STUB_TF_OUT_aws_region=local STUB_TF_OUT_repo_commit="$(git -C "$REPO" rev-parse HEAD)")
+}
+
+ops_join_password() {
+  env "${OPS_ENV[@]}" "$REPO/script/pz-ctl.sh" join-password | grep -qE '^[A-Za-z0-9]{24}$'
+}
+
+# Sube la configuración de prueba con pz-ctl.sh push-config (SSH real) y verifica que
+# el juego arranca con ella; después, una re-ejecución sin cambios no lo reinicia.
+cmd_config_test() {
+  running || die "la VM no está corriendo"
+  FAILS=0
+  local cfg ini="/home/pzserver/Zomboid/Server/$PZ_SERVER_NAME.ini" rc=0 pid_before pid_after
+  cfg="$(mktemp -d)"
+  for f in "$FIXTURE"/*; do cp "$f" "$cfg/$(basename "$f" | sed "s/^world1/$PZ_SERVER_NAME/")"; done
+  git -C "$cfg" init -q && git -C "$cfg" add -A && git -C "$cfg" -c user.email=t@t -c user.name=t commit -qm cfg
+  ops_env
+
+  log "Subiendo la configuración de prueba con pz-ctl.sh push-config..."
+  env "${OPS_ENV[@]}" "$REPO/script/pz-ctl.sh" push-config "$cfg" || rc=$?
+  expect "push-config terminó con éxito" test "$rc" -eq 0
+  expect "registro de la configuración aplicada con su origen" vm_ssh "sudo grep -q 'git:local@' /home/pzserver/pzsvrtool/config-applied.json"
+  expect "el juego arranca con la configuración" wait_game
+  expect "escucha en 16261/udp" wait_port
+  expect "el .ini tiene la contraseña de ingreso gestionada" vm_ssh "sudo grep -qxF \"Password=\$(sudo cat /home/pzserver/pzsvrtool/.join_password)\" $ini"
+  expect "RCON desactivado" vm_ssh "sudo grep -qx 'RCONPassword=' $ini"
+  expect "el juego usó el .ini subido (Map y PublicName)" vm_ssh "sudo grep -qx 'Map=Muldraugh, KY' $ini && sudo grep -qx 'PublicName=pz-local-test' $ini"
+  expect "el juego completó el .ini mínimo con sus opciones" vm_ssh "sudo grep -q '^PauseEmpty=' $ini"
+  expect "el mundo se creó con la configuración" vm_ssh "sudo test -d /home/pzserver/Zomboid/Saves/Multiplayer/$PZ_SERVER_NAME"
+  expect "SandboxVars del operador en uso" vm_ssh "sudo grep -q 'StartMonth = 12' /home/pzserver/Zomboid/Server/${PZ_SERVER_NAME}_SandboxVars.lua"
+  expect "pz-ctl.sh join-password la muestra" ops_join_password
+
+  pid_before="$(vm_ssh 'pgrep -u pzserver -f ProjectZomboid | head -1')"
+  log "Re-ejecutando pz-provision sin cambios (no debe reiniciar el juego)..."
+  rc=0
+  env "${OPS_ENV[@]}" "$REPO/script/pz-ctl.sh" provision || rc=$?
+  pid_after="$(vm_ssh 'pgrep -u pzserver -f ProjectZomboid | head -1')"
+  expect "provision sin cambios terminó bien" test "$rc" -eq 0
+  expect "el juego no se reinició (mismo PID)" test "$pid_before" = "$pid_after"
+  rm -rf "$cfg" "$OPS_BIN"
+  finish "config-test"
 }
 
 cmd_reboot_test() {
@@ -245,10 +345,11 @@ cmd_restore_test() {
   local marker pw_before pw_after old_id new_id resets_before
   marker="restore-$(date +%s)"
   vm_ssh "echo $marker | sudo -u pzserver tee /home/pzserver/restore-marker >/dev/null"
-  pw_before="$(vm_ssh 'sudo sha256sum /home/pzserver/pzsvrtool/.admin_password')"
+  pw_before="$(vm_ssh 'sudo sha256sum /home/pzserver/pzsvrtool/.admin_password /home/pzserver/pzsvrtool/.join_password /home/pzserver/pzsvrtool/config-applied.json')"
   old_id="$(vm_ssh 'cloud-init query instance_id')"
-  resets_before="$(vm_ssh 'sudo grep -c "HEAD is now at" /var/log/cloud-init-output.log || true')"
+  resets_before="$(vm_ssh 'sudo grep -c "revisión verificada" /var/log/cloud-init-output.log || true')"
 
+  serve_repo
   log "Apagando la VM y copiando su disco (equivale al snapshot)..."
   stop_vm
   mv "$DISK" "$STATE/disk-before-restore.qcow2"
@@ -260,13 +361,13 @@ cmd_restore_test() {
   start_vm
   wait_ssh
   wait_provision
-  pw_after="$(vm_ssh 'sudo sha256sum /home/pzserver/pzsvrtool/.admin_password')"
+  pw_after="$(vm_ssh 'sudo sha256sum /home/pzserver/pzsvrtool/.admin_password /home/pzserver/pzsvrtool/.join_password /home/pzserver/pzsvrtool/config-applied.json')"
 
   expect "instance-id nuevo ($old_id -> $new_id)" vm_ssh "[ \"\$(cloud-init query instance_id)\" = $new_id ]"
-  expect "user_data actualizó el checkout en lugar de clonar" vm_ssh "[ \"\$(sudo grep -c 'HEAD is now at' /var/log/cloud-init-output.log)\" -gt $resets_before ]"
+  expect "user_data volvió a verificar la revisión fija" vm_ssh "[ \"\$(sudo grep -c 'revisión verificada' /var/log/cloud-init-output.log)\" -gt $resets_before ]"
   expect "los datos del disco siguen ahí" vm_ssh "[ \"\$(sudo cat /home/pzserver/restore-marker)\" = $marker ]"
   expect "la partida guardada sigue ahí" vm_ssh "sudo test -d /home/pzserver/Zomboid/Saves/Multiplayer/$PZ_SERVER_NAME"
-  expect "la contraseña de admin no cambió" test "$pw_before" = "$pw_after"
+  expect "las contraseñas y la configuración aplicada no cambiaron" test "$pw_before" = "$pw_after"
   expect "el juego vuelve a correr" wait_game
   expect "servicio activo" svc "is-active --quiet pzsvrtool@$PZ_SERVER_NAME.service"
   finish "restore-test"
@@ -277,17 +378,11 @@ cmd_restore_test() {
 cmd_backup_test() {
   running || die "la VM no está corriendo"
   FAILS=0
-  local bin rc=0
-  bin="$(mktemp -d)"
-  ln -s "$REPO/tests/script/bin/aws" "$REPO/tests/script/bin/terraform" "$bin/"
-  export STUB_DIR="$bin" STUB_LOG="$bin/calls.log"
-  : > "$STUB_LOG"
+  local rc=0
+  ops_env
   wait_game || die "el juego no está corriendo antes del backup"
 
-  env PATH="$bin:$PATH" SSH_PORT="$SSH_PORT" SSH_KEY="$KEY" \
-    STUB_TF_OUT_public_ip=127.0.0.1 STUB_TF_OUT_pz_server_name="$PZ_SERVER_NAME" \
-    STUB_TF_OUT_aws_region=local STUB_TF_OUT_backup_bucket_name=local-bucket \
-    "$REPO/script/destroy-and-backup.sh" || rc=$?
+  env "${OPS_ENV[@]}" "$REPO/script/destroy-and-backup.sh" || rc=$?
 
   expect "el script terminó con éxito" test "$rc" -eq 0
   expect "no queda proceso ProjectZomboid" vm_ssh '! pgrep -u pzserver -f ProjectZomboid >/dev/null'
@@ -297,17 +392,20 @@ cmd_backup_test() {
   log "Volviendo a iniciar el servidor con systemctl --user start (comando documentado)..."
   svc "start pzsvrtool@$PZ_SERVER_NAME.service" || true
   expect "el juego vuelve a iniciar con systemctl --user start" wait_game
-  rm -rf "$bin"
+  rm -rf "$OPS_BIN"
   finish "backup-test"
 }
 
 cmd_down() {
   stop_vm
+  stop_git
   log "VM apagada (el disco se conserva; 'up' la vuelve a arrancar)."
 }
 
 cmd_clean() {
   stop_vm
+  stop_git
+  rm -rf "$STATE/git" "$STATE/git-http.log"
   rm -f "$DISK" "$STATE/disk-before-restore.qcow2" "$SEED" "$STATE/user-data" "$STATE/meta-data" \
     "$STATE/user_data.sh" "$KEY" "$KEY.pub" "$STATE/console.log"
   log "Discos, seed y claves borrados (la imagen base se conserva)."
@@ -318,10 +416,11 @@ case "${1:-}" in
   ssh) shift; vm_ssh "$@" ;;
   wait) wait_ssh; wait_provision ;;
   check) cmd_check ;;
+  config-test) cmd_config_test ;;
   reboot-test) cmd_reboot_test ;;
   restore-test) cmd_restore_test ;;
   backup-test) cmd_backup_test ;;
   down) cmd_down ;;
   clean) cmd_clean ;;
-  *) echo "uso: $0 up|ssh [cmd]|wait|check|reboot-test|restore-test|backup-test|down|clean" >&2; exit 2 ;;
+  *) echo "uso: $0 up|ssh [cmd]|wait|check|config-test|reboot-test|restore-test|backup-test|down|clean" >&2; exit 2 ;;
 esac

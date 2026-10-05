@@ -1,0 +1,69 @@
+---
+# Decide si hay que aplicar la configuración subida por el operador (pz-ctl.sh push-config).
+# Solo se aplica cuando cambia el resultado renderizado (archivos subidos + contraseña de
+# ingreso); una re-ejecución sin cambios, o un disco restaurado, no toca los archivos en uso.
+- name: Check for staged server configuration
+  ansible.builtin.stat:
+    path: "{{ pz_config_stage_dir }}"
+  register: pz_config_stage
+
+- name: Set staged configuration fact
+  ansible.builtin.set_fact:
+    pz_config_staged: "{{ pz_config_stage.stat.exists and pz_config_stage.stat.isdir }}"
+    pz_config_needs_apply: false
+
+- name: Render and validate staged configuration
+  when: pz_config_staged | bool
+  block:
+    - name: Clear previous render
+      ansible.builtin.file:
+        path: "{{ pz_config_render_dir }}"
+        state: absent
+      # Directorio de trabajo efímero: no es un cambio del host.
+      changed_when: false
+
+    - name: Render staged configuration
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ pz_helper_dir }}/pz-config-render.py"
+          - render
+          - --stage
+          - "{{ pz_config_stage_dir }}"
+          - --name
+          - "{{ pz_server_name }}"
+          - --out
+          - "{{ pz_config_render_dir }}"
+          - --ports
+          - "{{ pz_udp_ports[:2] | join(',') }}"
+      environment:
+        PZ_JOIN_PASSWORD: "{{ pz_join_password_effective }}"
+      register: pz_config_render
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    # Los errores del renderizador nunca incluyen valores del .ini.
+    - name: Fail on invalid staged configuration
+      ansible.builtin.fail:
+        msg: >-
+          La configuración subida en {{ pz_config_stage_dir }} es inválida; no se tocó
+          la configuración en uso. {{ pz_config_render.stderr }}
+      when: pz_config_render.rc != 0
+
+    - name: Read applied configuration record
+      ansible.builtin.slurp:
+        src: "{{ pz_config_state_file }}"
+      register: pz_config_state_slurp
+      failed_when: false
+
+    - name: Compare desired and applied configuration
+      ansible.builtin.set_fact:
+        pz_config_desired: "{{ pz_config_render.stdout | from_json }}"
+        pz_config_applied: >-
+          {{ (pz_config_state_slurp.content | b64decode | from_json)
+             if pz_config_state_slurp.content is defined else {} }}
+
+    - name: Decide whether to apply
+      ansible.builtin.set_fact:
+        pz_config_needs_apply: "{{ pz_config_desired.revision != pz_config_applied.revision | default('') }}"

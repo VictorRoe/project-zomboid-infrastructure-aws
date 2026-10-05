@@ -1,5 +1,35 @@
 # Offline: el provider de AWS está simulado; no hacen falta credenciales ni llamadas a la API.
-mock_provider "aws" {}
+mock_provider "aws" {
+  # Valores que un mock no puede inventar con sentido: tipo de instancia y documentos IAM.
+  override_data {
+    target = data.aws_ec2_instance_type.selected
+    values = { memory_size = 8192, supported_architectures = ["x86_64"], burstable_performance_supported = false }
+  }
+  override_data {
+    target = data.aws_iam_policy_document.dlm_assume
+    values = { json = "{}" }
+  }
+  override_data {
+    target = data.aws_iam_policy_document.dlm
+    values = { json = "{}" }
+  }
+  override_data {
+    target = data.aws_caller_identity.current
+    values = { account_id = "123456789012" }
+  }
+  override_resource {
+    target = aws_iam_role.dlm
+    values = { arn = "arn:aws:iam::123456789012:role/pz-dlm-test" }
+  }
+}
+
+# Commit fijo de prueba (#18): repo_commit es obligatorio fuera del modo rama.
+# Con SSH configurado, para que el aviso de check.ssh_access_for_operations no aparezca.
+variables {
+  repo_commit       = "0123456789abcdef0123456789abcdef01234567"
+  ssh_key_name      = "ops"
+  ssh_allowed_cidrs = ["203.0.113.4/32"]
+}
 
 override_data {
   target = data.aws_ami.ubuntu

@@ -1,0 +1,33 @@
+---
+# Corre las tareas de heap, contraseña de ingreso y configuración del servidor del
+# playbook en localhost como el usuario actual (sin root, sin systemd, sin AWS).
+# run.sh pasa con -e pz_user/pz_home/pz_server_name y los reemplazos de prueba
+# (pz_files_dir, pz_as_user = [], pz_manage_service = false): vars_files gana sobre vars.
+- name: Test heap, join password and server configuration
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../playbook/vars/main.yml
+
+  tasks:
+    - name: Validate variables
+      ansible.builtin.import_tasks: ../../playbook/tasks/validate.yml
+
+    - name: Create pzsvrtool directory
+      ansible.builtin.file:
+        path: "{{ pz_home }}/pzsvrtool"
+        state: directory
+        mode: "0700"
+
+    - name: Resolve admin password
+      ansible.builtin.import_tasks: ../../playbook/tasks/admin_password.yml
+
+    - name: Apply game settings
+      ansible.builtin.import_tasks: ../../playbook/tasks/game_settings.yml
+
+    - name: Report results (never secret values)
+      ansible.builtin.debug:
+        msg: >-
+          RESULT needs_stop={{ pz_needs_stop }} staged={{ pz_config_staged }}
+          applied_now={{ pz_config_needs_apply }} join_len={{ pz_join_password_effective | length }}

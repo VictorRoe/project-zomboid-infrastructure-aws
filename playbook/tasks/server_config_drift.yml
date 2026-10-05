@@ -1,0 +1,27 @@
+---
+# Sin configuración nueva: si el .ini en uso difiere de la última subida (edición manual
+# o comando de admin dentro del juego), se avisa y NO se pisa. La próxima subida guarda
+# una copia de lo que haya y aplica la nueva (la subida es la fuente de verdad).
+- name: Compare configuration in use with the last upload
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ pz_helper_dir }}/pz-config-render.py"
+      - drift
+      - --desired
+      - "{{ pz_config_render_dir }}"
+      - --live
+      - "{{ pz_server_config_dir }}"
+      - --name
+      - "{{ pz_server_name }}"
+  register: pz_config_drift
+  changed_when: false
+
+- name: Warn about manual changes
+  ansible.builtin.debug:
+    msg: >-
+      ADVERTENCIA: {{ pz_server_name }}.ini difiere de la última configuración subida
+      en {{ (pz_config_drift.stdout | from_json).changed_keys | join(', ') }}. No se pisó.
+      Para conservar el cambio, incorporarlo al directorio de configuración y volver a
+      subirlo; la próxima subida guarda una copia en {{ pz_config_backup_dir }}.
+  when: (pz_config_drift.stdout | from_json).changed_keys | length > 0

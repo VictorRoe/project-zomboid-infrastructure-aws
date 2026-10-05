@@ -11,7 +11,10 @@
       - pz_update_window_end is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
       - pz_update_check_minutes | int >= 5
       - pz_update_countdown_minutes | int >= 1
-    fail_msg: Revisar las variables de servidor/admin/actualización.
+      - pz_java_xmx_mb | int >= 1024
+      - pz_host_overhead_mb | int >= 1024
+      - pz_udp_ports | length >= 2
+    fail_msg: Revisar las variables de servidor/admin/actualización/heap.
 
 - name: Validate supplied admin password
   ansible.builtin.assert:
@@ -26,3 +29,17 @@
       débil conocido y no contener espacios ni '=' (formato de config de pzsvrtool).
       Dejarla vacía para generar una contraseña aleatoria.
   when: pz_admin_password | length > 0
+
+- name: Validate supplied join password
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - pz_join_password | length >= 12
+      - (pz_join_password | lower) not in (pz_admin_password_denylist | map('lower') | list)
+      - not (pz_join_password is search('\\s'))
+      - pz_join_password != pz_admin_password
+    fail_msg: >-
+      pz_join_password tiene que tener al menos 12 caracteres, no ser un valor débil
+      conocido, no contener espacios y ser distinta de pz_admin_password.
+      Dejarla vacía para generar una contraseña aleatoria.
+  when: pz_join_password | length > 0

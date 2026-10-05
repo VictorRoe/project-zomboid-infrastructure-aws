@@ -1,0 +1,72 @@
+---
+# Aplica la configuración renderizada por server_config_plan.yml. El juego ya está
+# detenido (stop_game.yml): PZ reescribe el .ini, así que nunca se edita en caliente.
+- name: Create server configuration directory
+  ansible.builtin.file:
+    path: "{{ pz_server_config_dir }}"
+    state: directory
+    owner: "{{ pz_user }}"
+    group: "{{ pz_user }}"
+    mode: "0755"
+
+- name: Back up configuration in use
+  ansible.builtin.shell: |
+    set -e
+    dest={{ (pz_config_backup_dir + '/' + now(utc=true, fmt='%Y%m%dT%H%M%SZ')) | quote }}
+    found=0
+    for f in {% for f in pz_config_desired.files.keys() %}{{ f | quote }} {% endfor %}; do
+      if [ -f {{ pz_server_config_dir | quote }}/"$f" ]; then
+        [ "$found" = 1 ] || install -d -m 0700 -o {{ pz_user | quote }} -g {{ pz_user | quote }} "$dest"
+        found=1
+        cp -p {{ pz_server_config_dir | quote }}/"$f" "$dest/"
+      fi
+    done
+    if [ "$found" = 1 ]; then echo "backup=$dest"; fi
+  args:
+    executable: /bin/bash
+  register: pz_config_backup
+  changed_when: "'backup=' in pz_config_backup.stdout"
+
+- name: Install rendered configuration files
+  ansible.builtin.copy:
+    src: "{{ pz_config_render_dir }}/{{ item }}"
+    dest: "{{ pz_server_config_dir }}/{{ item }}"
+    remote_src: true
+    owner: "{{ pz_user }}"
+    group: "{{ pz_user }}"
+    # El .ini lleva la contraseña de ingreso.
+    mode: "{{ '0600' if item.endswith('.ini') else '0644' }}"
+  loop: "{{ pz_config_desired.files.keys() | list }}"
+  no_log: true
+
+- name: Record applied configuration
+  ansible.builtin.copy:
+    dest: "{{ pz_config_state_file }}"
+    content: >-
+      {{ {'revision': pz_config_desired.revision,
+          'source': pz_config_desired.source,
+          'files': pz_config_desired.files,
+          'backup': (pz_config_backup.stdout | regex_replace('^backup=', '')),
+          'applied_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ')} | to_nice_json }}
+    owner: "{{ pz_user }}"
+    group: "{{ pz_user }}"
+    mode: "0600"
+
+- name: Keep only the newest configuration backups
+  ansible.builtin.shell: |
+    set -o pipefail
+    cd {{ pz_config_backup_dir | quote }} 2>/dev/null || exit 0
+    ls -1d */ 2>/dev/null | sort -r | tail -n +{{ (pz_config_backup_keep | int) + 1 }} | while read -r d; do
+      rm -rf -- "$d"; echo "removed $d"
+    done
+  args:
+    executable: /bin/bash
+  register: pz_config_prune
+  changed_when: "'removed' in pz_config_prune.stdout"
+
+- name: Report applied configuration
+  ansible.builtin.debug:
+    msg: >-
+      Configuración aplicada: revisión {{ pz_config_desired.revision[:12] }},
+      origen {{ pz_config_desired.source.source | default('desconocido') }};
+      copia de la anterior: {{ pz_config_backup.stdout | regex_replace('^backup=', '') | default('ninguna', true) }}.

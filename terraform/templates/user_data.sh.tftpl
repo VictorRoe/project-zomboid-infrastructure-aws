@@ -1,20 +1,27 @@
 #!/bin/bash
-set -e
+# cloud-init lo ejecuta una vez por instancia (nueva o restaurada desde un snapshot).
+set -euo pipefail
 
 apt-get update -y
 apt-get install -y python3-pip git software-properties-common
 add-apt-repository --yes --update ppa:ansible/ansible
 apt-get install -y ansible
 
-# En un disco restaurado desde un snapshot el checkout ya existe. Git corre como
-# ubuntu porque rechaza repos de otro usuario ("dubious ownership").
-if [ -d ${repo_dir}/.git ]; then
-  runuser -u ubuntu -- git -C ${repo_dir} fetch origin ${repo_branch}
-  runuser -u ubuntu -- git -C ${repo_dir} reset --hard origin/${repo_branch}
-else
-  mkdir -p ${repo_dir}
-  git clone --branch ${repo_branch} ${repo_url} ${repo_dir}
-  chown -R ubuntu:ubuntu ${repo_dir}
-fi
+# Configuración de pz-provision: valores de Terraform, sin secretos.
+cat > /etc/pz-provision.env <<'ENV'
+REPO_URL=${repo_url}
+REPO_BRANCH=${repo_branch}
+REPO_COMMIT=${repo_commit}
+REPO_FOLLOW_BRANCH=${repo_follow_branch}
+REPO_DIR=${repo_dir}
+PZ_SERVER_NAME=${server_name}
+PZ_JAVA_XMX_MB=${java_xmx_mb}
+PZ_HOST_OVERHEAD_MB=${host_overhead_mb}
+PZ_WAIT_FOR_CONFIG=${wait_for_config}
+ENV
+chmod 0644 /etc/pz-provision.env
 
-su - ubuntu -c "cd ${repo_dir}/playbook && ansible-playbook -i inventory.ini project-zomboid-server-install.yml -e pz_server_name=${server_name}"
+echo '${provision_script_b64}' | base64 -d > /usr/local/sbin/pz-provision
+chmod 0755 /usr/local/sbin/pz-provision
+
+/usr/local/sbin/pz-provision

@@ -1,0 +1,4 @@
+# Copiar a backend.hcl (ignorado por git) con los valores que imprime bootstrap/state-backend:
+#   terraform init -backend-config=backend.hcl
+bucket = "pz-tfstate-123456789012-us-east-1"
+region = "us-east-1"

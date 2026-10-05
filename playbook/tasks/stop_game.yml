@@ -1,0 +1,28 @@
+---
+# Apagado ordenado antes de tocar heap, configuración o contraseña: el ExecStop de
+# pzsvrtool avisa, hace la cuenta regresiva y guarda. Falla si el proceso no termina.
+- name: Stop Project Zomboid gracefully before applying changes
+  ansible.builtin.shell: |
+    set -e
+    export HOME={{ pz_home | quote }}
+    export XDG_RUNTIME_DIR=/run/user/{{ pz_uid }}
+    export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ pz_uid }}/bus
+    svc=pzsvrtool@{{ pz_server_name }}.service
+    if runuser -u {{ pz_user }} -- env HOME="$HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+        DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" systemctl --user is-active --quiet "$svc"; then
+      runuser -u {{ pz_user }} -- env HOME="$HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+        DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" systemctl --user stop "$svc"
+      echo stopped
+    fi
+    deadline=$(( $(date +%s) + {{ pz_stop_timeout_seconds | int }} ))
+    while pgrep -u {{ pz_user }} -f ProjectZomboid >/dev/null; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo "ProjectZomboid sigue corriendo tras {{ pz_stop_timeout_seconds }}s" >&2
+        exit 1
+      fi
+      sleep 5
+    done
+  args:
+    executable: /bin/bash
+  register: pz_stop_game
+  changed_when: "'stopped' in pz_stop_game.stdout"

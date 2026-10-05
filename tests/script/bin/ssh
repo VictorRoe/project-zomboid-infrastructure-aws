@@ -3,10 +3,20 @@
 printf 'ssh %s\n' "$*" >> "$STUB_LOG"
 [ "${STUB_SSH_FAIL:-0}" = "1" ] && exit 255
 cmd="${*: -1}"
-if [[ "$cmd" == *pgrep* ]]; then
+# STUB_REMOTE_FAIL: si el comando remoto contiene este texto, falla.
+if [ -n "${STUB_REMOTE_FAIL:-}" ] && [[ "$cmd" == *"$STUB_REMOTE_FAIL"* ]]; then
+  cat >/dev/null
+  exit 1
+fi
+if [[ "$cmd" == *"tar -C"* ]]; then
+  # push-config: guarda lo que llega por stdin para inspeccionarlo.
+  mkdir -p "$STUB_DIR/upload" && tar -C "$STUB_DIR/upload" -xf -
+elif [[ "$cmd" == *pgrep* ]]; then
   # STUB_PZ_RUNNING_POLLS: cantidad de consultas que todavía informan "running".
   n=$(cat "$STUB_DIR/polls" 2>/dev/null || echo 0)
   echo $((n + 1)) > "$STUB_DIR/polls"
   if [ "$n" -lt "${STUB_PZ_RUNNING_POLLS:-0}" ]; then echo running; else echo stopped; fi
+elif [[ "$cmd" == *".join_password"* ]]; then
+  printf 'JoinPw123456789'
 fi
 exit 0
