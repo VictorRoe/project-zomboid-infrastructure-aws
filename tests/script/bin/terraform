@@ -1,0 +1,21 @@
+#!/bin/bash
+# Stub: registra argv. `output -raw NOMBRE` imprime STUB_TF_OUT_<NOMBRE> o un valor por defecto;
+# los nombres listados en STUB_TF_MISSING fallan como un output inexistente.
+printf 'terraform %s\n' "$*" >> "$STUB_LOG"
+args=("$@")
+[[ "${args[0]}" == -chdir=* ]] && args=("${args[@]:1}")
+if [ "${args[0]}" = "output" ]; then
+  name="${args[-1]}"
+  [[ " ${STUB_TF_MISSING:-} " == *" $name "* ]] && { echo "Output \"$name\" not found" >&2; exit 1; }
+  var="STUB_TF_OUT_$name"
+  if [ -n "${!var+x}" ]; then printf '%s' "${!var}"; exit 0; fi
+  case "$name" in
+    public_ip) printf '203.0.113.10' ;;
+    root_volume_id) printf 'vol-output' ;;
+    backup_bucket_name) printf 'bucket-from-output' ;;
+    aws_region) printf 'sa-east-1' ;;
+    pz_server_name) printf 'world1' ;;
+    *) echo "Output \"$name\" not found" >&2; exit 1 ;;
+  esac
+fi
+exit 0

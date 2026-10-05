@@ -38,4 +38,6 @@ override.tf.json
 terraform.rc
 
 # End of https://www.toptal.com/developers/gitignore/api/terraform
-terraform/.terraform.lock.hcl
+
+# Entorno local de VM (imágenes, discos, claves, logs)
+.local-vm/

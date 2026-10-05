@@ -22,6 +22,90 @@ data "aws_ebs_snapshot" "latest_zomboid_snapshot" {
   }
 }
 
+# Imagen Ubuntu Server 24.04 LTS de Canonical para la región configurada.
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+locals {
+  base_ami_id = var.ami_id != "" ? var.ami_id : data.aws_ami.ubuntu.id
+
+  # Origen de la restauración: snapshot explícito > último snapshot con tag > ninguno.
+  latest_snapshot_id  = length(data.aws_ebs_snapshot.latest_zomboid_snapshot) > 0 ? data.aws_ebs_snapshot.latest_zomboid_snapshot[0].id : ""
+  restore_snapshot_id = !var.restore_from_snapshot ? "" : (var.restore_snapshot_id != "" ? var.restore_snapshot_id : local.latest_snapshot_id)
+  restoring           = local.restore_snapshot_id != ""
+
+  root_volume_size = local.restoring ? max(30, data.aws_ebs_snapshot.restore[0].volume_size) : 30
+  instance_ami_id  = local.restoring ? aws_ami.restored[0].id : local.base_ami_id
+
+  key_name = length(aws_key_pair.pz) > 0 ? aws_key_pair.pz[0].key_name : (var.ssh_key_name != "" ? var.ssh_key_name : null)
+
+  user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
+    repo_url    = var.repo_url
+    repo_branch = var.repo_branch
+    repo_dir    = "/home/ubuntu/repo"
+    server_name = var.pz_server_name
+  })
+}
+
+data "aws_ebs_snapshot" "restore" {
+  count        = local.restoring ? 1 : 0
+  owners       = ["self"]
+  snapshot_ids = [local.restore_snapshot_id]
+}
+
+# Imagen registrada desde el snapshot de backup del disco raíz anterior. El destroy
+# la desregistra; el snapshot no se gestiona acá y queda.
+resource "aws_ami" "restored" {
+  count               = local.restoring ? 1 : 0
+  name                = "pz-restore-${local.restore_snapshot_id}"
+  root_device_name    = "/dev/sda1"
+  virtualization_type = "hvm"
+  ena_support         = true
+  boot_mode           = "uefi-preferred"
+
+  ebs_block_device {
+    device_name           = "/dev/sda1"
+    snapshot_id           = local.restore_snapshot_id
+    volume_size           = local.root_volume_size
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
+  tags = {
+    Name = "pz-restore-${local.restore_snapshot_id}"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = data.aws_ebs_snapshot.restore[0].state == "completed"
+      error_message = "El snapshot ${local.restore_snapshot_id} todavía no está completo; esperar antes de restaurar."
+    }
+  }
+}
+
+resource "aws_key_pair" "pz" {
+  count      = var.ssh_public_key != "" ? 1 : 0
+  key_name   = "pz-server"
+  public_key = var.ssh_public_key
+}
+
 resource "aws_security_group" "pz_sg" {
   name        = "pz-server-sg"
   description = "Puertos requeridos para Project Zomboid"
@@ -44,7 +128,7 @@ resource "aws_security_group" "pz_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.ssh_allowed_cidrs
   }
 
   egress {
@@ -55,15 +139,16 @@ resource "aws_security_group" "pz_sg" {
   }
 }
 
-# 5. Instancia EC2 con script de User Data
+# Instancia EC2 con script de User Data
 resource "aws_instance" "pz_server" {
-  ami                    = "ami-0b6d9d3d33ba97d99" # Ubuntu Server
+  ami                    = local.instance_ami_id
   instance_type          = var.instance_type
   availability_zone      = var.availability_zone
   vpc_security_group_ids = [aws_security_group.pz_sg.id]
+  key_name               = local.key_name
 
   root_block_device {
-    volume_size           = 30
+    volume_size           = local.root_volume_size
     volume_type           = "gp3"
     delete_on_termination = true
     tags = {
@@ -72,23 +157,15 @@ resource "aws_instance" "pz_server" {
   }
 
 
-  user_data = <<-EOF
-              #!/bin/bash
-              set -e
-
-              apt-get update -y
-              apt-get install -y python3-pip git software-properties-common
-              add-apt-repository --yes --update ppa:ansible/ansible
-              apt-get install -y ansible
-
-              mkdir -p /home/ubuntu/repo
-              git clone https://github.com/VictorRoe/project-zomboid-infrastructure-aws.git /home/ubuntu/repo
-              chown -R ubuntu:ubuntu /home/ubuntu/repo
-
-              su - ubuntu -c "cd /home/ubuntu/repo/playbook && ansible-playbook -i inventory.ini project-zomboid-server-install.yml"
-              EOF
+  user_data = local.user_data
 
   tags = {
     Name = "PZ-Server-Instance"
+  }
+
+  # El disco raíz contiene el mundo: una imagen nueva nunca debe reemplazar un
+  # servidor en marcha implícitamente. Reconstruir a propósito con -replace tras un backup.
+  lifecycle {
+    ignore_changes = [ami]
   }
 }

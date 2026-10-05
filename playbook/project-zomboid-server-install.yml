@@ -4,82 +4,8 @@
   become: true
   gather_facts: true
 
-  vars:
-    # -------------------------------------------------------------------------
-    # Host / account
-    # -------------------------------------------------------------------------
-    pz_user: pzserver
-    pz_home: "/home/{{ pz_user }}"
-
-    # pzsvrtool: pin the tool itself; PZ game updates are managed separately.
-    pzsvrtool_version: "1.7.3"
-    pzsvrtool_deb_url: >-
-      https://github.com/Lu5ck/pzsvrtool/releases/download/{{ pzsvrtool_version }}/pzsvrtool.x86_64.deb
-    pzsvrtool_deb_path: "/tmp/pzsvrtool-{{ pzsvrtool_version }}.deb"
-
-    # -------------------------------------------------------------------------
-    # Project Zomboid
-    # -------------------------------------------------------------------------
-    # No spaces. Changing this later selects/creates another PZ server world.
-    pz_server_name: zomboid
-
-    # Empty string = Steam stable/public branch.
-    # Example beta value: "42.19"
-    pz_branch: ""
-
-    # Root admin used by pzsvrtool on server startup.
-    # Put pz_admin_password in Ansible Vault or pass it with --extra-vars.
-    pz_admin_name: pzadmin
-    pz_admin_password: "test"
-
-    # Keep the game's Java heap controlled by ProjectZomboid64.json; provide
-    # host headroom with VM RAM plus swap instead of raising -Xmx.
-    pz_swap_file: /swapfile
-    pz_swap_size_gb: 2
-
-    # pzsvrtool behavior
-    pz_shutdown_countdown_minutes: 5
-    pz_backup_enabled: true
-    pz_backup_limit: 10
-    pz_discord_webhook: ""
-
-    # -------------------------------------------------------------------------
-    # Firewall
-    # -------------------------------------------------------------------------
-    pz_manage_ufw: true
-    pz_ssh_port: 22
-    pz_udp_ports:
-      - 16261
-      - 16262
-      - 8766
-
-    # -------------------------------------------------------------------------
-    # Automatic PZ updates
-    # -------------------------------------------------------------------------
-    pz_auto_update_enabled: true
-
-    # Timer checks periodically, but maintenance only STARTS inside this window.
-    # Supports normal windows (03:00-06:00) and crossing-midnight windows
-    # (23:00-02:00).
-    pz_update_window_start: "03:00"
-    pz_update_window_end: "06:00"
-    pz_update_timezone: "America/Argentina/Buenos_Aires"
-
-    # How frequently Steam is checked. Outside the window the check exits fast.
-    pz_update_check_minutes: 15
-
-    # Player warning before shutting down for an actual game update.
-    pz_update_countdown_minutes: 5
-
-    # Maximum time to wait for the graceful shutdown to complete.
-    pz_update_shutdown_timeout_minutes: 20
-
-    # -------------------------------------------------------------------------
-    # Basic host requirements
-    # -------------------------------------------------------------------------
-    # 9000 MB intentionally allows a 10 GiB VM to report ~9.7 GiB usable RAM.
-    pz_min_ram_mb: 7500
-    pz_min_vcpus: 2
+  vars_files:
+    - vars/main.yml
 
   pre_tasks:
     - name: Validate supported host
@@ -90,26 +16,11 @@
           - ansible_memtotal_mb | int >= pz_min_ram_mb | int
           - ansible_processor_vcpus | int >= pz_min_vcpus | int
         fail_msg: >-
-          This playbook expects Debian/Ubuntu x86_64 with at least
-          {{ pz_min_vcpus }} vCPU and approximately {{ pz_min_ram_mb }} MB usable RAM.
+          Este playbook espera Debian/Ubuntu x86_64 con al menos
+          {{ pz_min_vcpus }} vCPU y aproximadamente {{ pz_min_ram_mb }} MB de RAM utilizable.
 
     - name: Validate Project Zomboid variables
-      ansible.builtin.assert:
-        that:
-          - pz_server_name is match('^[A-Za-z0-9._-]+$')
-          - pz_admin_name | length > 0
-          - pz_admin_password != 'CHANGE_ME_USE_ANSIBLE_VAULT'
-          - pz_admin_password | length > 0
-          - not (pz_admin_password is search('\\s'))
-          - "'=' not in pz_admin_password"
-          - pz_update_window_start is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
-          - pz_update_window_end is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
-          - pz_update_check_minutes | int >= 5
-          - pz_update_countdown_minutes | int >= 1
-        fail_msg: >-
-          Check server/admin/update variables. The pzsvrtool config format does not
-          tolerate spaces or '=' in the admin password.
-      no_log: true
+      ansible.builtin.import_tasks: tasks/validate.yml
 
   tasks:
     - name: Install base packages and pzsvrtool runtime dependencies
@@ -250,6 +161,9 @@
         group: "{{ pz_user }}"
         mode: "0700"
 
+    - name: Resolve admin password (supplied or generated, persisted)
+      ansible.builtin.import_tasks: tasks/admin_password.yml
+
     - name: Configure pzsvrtool non-interactively
       ansible.builtin.copy:
         dest: "{{ pz_home }}/pzsvrtool/pzsvrtool.config"
@@ -263,7 +177,7 @@
           backupLimit={{ pz_backup_limit }}
           discord_webhook_notice={{ pz_discord_webhook }}
           pzRootAdmin={{ pz_admin_name }}
-          pzRootAdminPassword={{ pz_admin_password }}
+          pzRootAdminPassword={{ pz_admin_password_effective }}
       no_log: true
 
     - name: Install Project Zomboid dedicated server with pzsvrtool via runuser
@@ -278,6 +192,9 @@
         fi
       args:
         executable: /bin/bash
+        # pzsvrtool descarga SteamCMD en el directorio actual y runuser no lo cambia:
+        # tiene que ser uno donde pzserver pueda escribir.
+        chdir: "{{ pz_home }}"
       register: pz_initial_install_runuser
       changed_when: "'Installation Completed' in pz_initial_install_runuser.stdout"
 
@@ -297,8 +214,23 @@
         fi
       args:
         executable: /bin/bash
+        chdir: "{{ pz_home }}"
       register: pz_direct_steamcmd_install
       changed_when: "'Success! App' in pz_direct_steamcmd_install.stdout"
+
+    # pzsvrtool imprime "Installation Completed" aunque la descarga falle.
+    - name: Check that Project Zomboid is installed
+      ansible.builtin.stat:
+        path: "{{ pz_home }}/pzserver/start-server.sh"
+      register: pz_start_script
+
+    - name: Fail if Project Zomboid is not installed
+      ansible.builtin.assert:
+        that: pz_start_script.stat.exists
+        fail_msg: >-
+          No se encontró {{ pz_home }}/pzserver/start-server.sh después de instalar.
+          Revisar la salida de pzsvrtool/SteamCMD (red, espacio en disco, permisos).
+        quiet: true
 
     - name: Create user systemd configuration directory
       ansible.builtin.file:
@@ -708,16 +640,17 @@
     - name: Show final service information
       ansible.builtin.debug:
         msg:
-          - "Project Zomboid is installed and started as {{ pz_user }}."
-          - "Boot service: pzsvrtool@{{ pz_server_name }}.service (systemd --user + linger)."
+          - "Project Zomboid quedó instalado e iniciado como {{ pz_user }}."
+          - "Servicio de arranque: pzsvrtool@{{ pz_server_name }}.service (systemd --user + linger)."
           - >-
-            Automatic PZ updates: {{ 'enabled' if pz_auto_update_enabled else 'disabled' }};
-            window {{ pz_update_window_start }}-{{ pz_update_window_end }}
-            ({{ pz_update_timezone }}), checked every {{ pz_update_check_minutes }} minutes.
+            Actualizaciones automáticas de PZ: {{ 'activadas' if pz_auto_update_enabled else 'desactivadas' }};
+            ventana {{ pz_update_window_start }}-{{ pz_update_window_end }}
+            ({{ pz_update_timezone }}), chequeo cada {{ pz_update_check_minutes }} minutos.
+          - "Contraseña de admin ({{ pz_admin_name }}): sudo cat {{ pz_admin_password_file }}"
           - "Console: sudo -iu {{ pz_user }} pzsvrtool console"
-          - "Service status: sudo -iu {{ pz_user }} systemctl --user status pzsvrtool@{{ pz_server_name }}.service"
-          - "Update timer: sudo -iu {{ pz_user }} systemctl --user list-timers pz-auto-update.timer"
-          - "Update logs: sudo -iu {{ pz_user }} journalctl --user -u pz-auto-update.service"
+          - "Estado del servicio: sudo -u {{ pz_user }} env XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} systemctl --user status pzsvrtool@{{ pz_server_name }}.service"
+          - "Timer de actualización: sudo -u {{ pz_user }} env XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} systemctl --user list-timers pz-auto-update.timer"
+          - "Logs de actualización: sudo -u {{ pz_user }} env XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} journalctl --user -u pz-auto-update.service"
 
   handlers:
     - name: Reload system systemd

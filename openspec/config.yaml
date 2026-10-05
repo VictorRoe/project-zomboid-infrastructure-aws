@@ -1,0 +1,12 @@
+schema: spec-driven
+
+context: |
+  Escribir todos los artefactos en castellano (proposal, design, specs, tasks).
+  Mantener en inglés los marcadores estructurales que exige OpenSpec: "## Purpose",
+  "## ADDED/MODIFIED/REMOVED Requirements", "### Requirement:", "#### Scenario:",
+  "- **WHEN**", "- **THEN**", "- **AND**". Los requisitos usan "DEBE (SHALL)" /
+  "NO DEBE (SHALL NOT)" porque el validador exige SHALL o MUST.
+  Todo se prueba offline: terraform test con mock_provider, Ansible en localhost,
+  y el script con stubs de aws/ssh/terraform. Nunca usar AWS real en tests.
+  Cada cambio actualiza docs/spec.md, agrega una entrada D<n> en docs/decisions.md
+  y una entrada en CHANGELOG.md.
