@@ -192,6 +192,9 @@
         fi
       args:
         executable: /bin/bash
+        # pzsvrtool descarga SteamCMD en el directorio actual y runuser no lo cambia:
+        # tiene que ser uno donde pzserver pueda escribir.
+        chdir: "{{ pz_home }}"
       register: pz_initial_install_runuser
       changed_when: "'Installation Completed' in pz_initial_install_runuser.stdout"
 
@@ -211,8 +214,23 @@
         fi
       args:
         executable: /bin/bash
+        chdir: "{{ pz_home }}"
       register: pz_direct_steamcmd_install
       changed_when: "'Success! App' in pz_direct_steamcmd_install.stdout"
+
+    # pzsvrtool imprime "Installation Completed" aunque la descarga falle.
+    - name: Check that Project Zomboid is installed
+      ansible.builtin.stat:
+        path: "{{ pz_home }}/pzserver/start-server.sh"
+      register: pz_start_script
+
+    - name: Fail if Project Zomboid is not installed
+      ansible.builtin.assert:
+        that: pz_start_script.stat.exists
+        fail_msg: >-
+          No se encontró {{ pz_home }}/pzserver/start-server.sh después de instalar.
+          Revisar la salida de pzsvrtool/SteamCMD (red, espacio en disco, permisos).
+        quiet: true
 
     - name: Create user systemd configuration directory
       ansible.builtin.file:

@@ -81,3 +81,27 @@ terraform -chdir=terraform test -filter=tests/restore.tftest.hcl   # una sola su
 ```
 
 Requiere Terraform >= 1.9 y ansible-core. `terraform init` descarga el provider del registry pero nunca llama a AWS.
+
+## Pruebas locales con una VM (sin AWS)
+
+Levanta con QEMU/KVM la misma imagen cloud de Ubuntu 24.04 que usa AWS y le pasa por cloud-init el mismo `user_data` que renderiza Terraform. Así se prueba el aprovisionamiento real (Ansible, pzsvrtool, Steam, servicio systemd) sin gastar en AWS. Requiere KVM, `qemu-system-x86_64`, `qemu-img`, `cloud-localds`, unos 10 GB de RAM libres y ~15 GB de disco.
+
+La VM clona la **rama actual desde GitHub**, así que tiene que estar pusheada (el script lo verifica). Para otra rama: `LOCAL_REPO_BRANCH=<rama>`.
+
+```bash
+make local-up             # descarga y verifica la imagen, crea la VM y espera el aprovisionamiento; luego corre check
+make local-check          # servicio, proceso, puerto 16261/udp, linger, timer, contraseña, UFW
+make local-reboot-test    # reinicia la VM y verifica que el juego vuelve solo
+make local-backup-test    # script de backup con SSH real contra la VM y aws/terraform simulados
+make local-restore-test   # copia el disco y arranca con otro instance-id (como una AMI restaurada)
+make local-test           # todo lo anterior en orden
+make local-ssh            # shell en la VM (o: local/vm.sh ssh '<comando>')
+make local-down           # apaga la VM (el disco queda)
+make local-clean          # borra discos, seed y claves (la imagen base queda en .local-vm/)
+```
+
+Con la VM corriendo se puede jugar contra ella: en el juego, conectarse a `127.0.0.1:16261`. La contraseña del admin: `local/vm.sh ssh 'sudo cat /home/pzserver/pzsvrtool/.admin_password'`.
+
+Variables opcionales: `LOCAL_VM_MEM` (MB, 10240), `LOCAL_VM_CPUS` (4), `LOCAL_VM_DISK` (40G), `LOCAL_SSH_PORT` (2222), `PROVISION_TIMEOUT` (3600 s), `LOCAL_REPO_BRANCH`.
+
+**No cubre:** la búsqueda real de la AMI, el arranque en hardware de AWS (Nitro, ENA, `uefi-preferred`), los snapshots EBS ni el security group.
