@@ -7,8 +7,8 @@
 
 ## 2. Entorno de VM local
 
-- [ ] 2.1 Crear `local/vm.sh` (`up`, `ssh`, `wait`, `check`, `down`, `clean`): descarga y verificación de la imagen, overlay, clave SSH, seed NoCloud MIME, QEMU con reenvío de puertos; agregar targets `local-*` al `Makefile` y `.local-vm/` a `.gitignore`; verificar con `bash -n` + shellcheck y con `make local-up` hasta que `check` pase
-- [ ] 2.2 Agregar `reboot-test`, `restore-test` y `backup-test` a `local/vm.sh`; verificar ejecutando cada uno contra la VM y que todos sus chequeos pasen
+- [x] 2.1 Crear `local/vm.sh` (`up`, `ssh`, `wait`, `check`, `down`, `clean`): descarga y verificación de la imagen, overlay, clave SSH, seed NoCloud MIME, QEMU con reenvío de puertos; agregar targets `local-*` al `Makefile` y `.local-vm/` a `.gitignore`; verificar con `bash -n` + shellcheck y con `make local-up` hasta que `check` pase
+- [x] 2.2 Agregar `reboot-test`, `restore-test` y `backup-test` a `local/vm.sh`; verificar ejecutando cada uno contra la VM y que todos sus chequeos pasen
 
 ## 3. Docs y changelog
 

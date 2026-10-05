@@ -165,6 +165,15 @@ wait_game() {
   done
 }
 
+# El juego tarda en cargar assets y el mundo antes de abrir el puerto.
+wait_port() {
+  local deadline=$(( $(date +%s) + BOOT_TIMEOUT ))
+  until vm_ssh 'sudo ss -lun | grep -q ":16261 "'; do
+    [ "$(date +%s)" -ge "$deadline" ] && return 1
+    sleep 5
+  done
+}
+
 stop_vm() {
   running || return 0
   vm_ssh 'sudo systemctl poweroff' 2>/dev/null || true
@@ -204,7 +213,7 @@ cmd_check() {
   expect "servicio habilitado" vm_ssh "[ \"\$($PZ_USER_ENV systemctl --user is-enabled pzsvrtool@$PZ_SERVER_NAME.service)\" = enabled ]"
   expect "servicio activo" svc "is-active --quiet pzsvrtool@$PZ_SERVER_NAME.service"
   expect "proceso ProjectZomboid corriendo" wait_game
-  expect "escucha en 16261/udp" vm_ssh 'sudo ss -lunp | grep -q ":16261 "'
+  expect "escucha en 16261/udp" wait_port
   expect "linger activo" vm_ssh '[ "$(loginctl show-user pzserver -p Linger --value)" = yes ]'
   expect "timer de actualización activo" svc "is-active --quiet pz-auto-update.timer"
   expect "contraseña de admin 0600 de pzserver" vm_ssh '[ "$(sudo stat -c "%a %U" /home/pzserver/pzsvrtool/.admin_password)" = "600 pzserver" ]'
@@ -217,11 +226,15 @@ cmd_check() {
 cmd_reboot_test() {
   running || die "la VM no está corriendo"
   FAILS=0
+  local boot_before
+  boot_before="$(vm_ssh 'cat /proc/sys/kernel/random/boot_id')"
   log "Reiniciando la VM..."
   vm_ssh 'sudo systemctl reboot' 2>/dev/null || true
   sleep 15
   wait_ssh
+  expect "la VM se reinició (boot_id nuevo)" vm_ssh "[ \"\$(cat /proc/sys/kernel/random/boot_id)\" != $boot_before ]"
   expect "el juego vuelve a correr solo tras el reinicio" wait_game
+  expect "vuelve a escuchar en 16261/udp" wait_port
   expect "servicio activo tras el reinicio" svc "is-active --quiet pzsvrtool@$PZ_SERVER_NAME.service"
   finish "reboot-test"
 }
@@ -229,11 +242,12 @@ cmd_reboot_test() {
 cmd_restore_test() {
   running || die "la VM no está corriendo"
   FAILS=0
-  local marker pw_before pw_after old_id new_id
+  local marker pw_before pw_after old_id new_id resets_before
   marker="restore-$(date +%s)"
   vm_ssh "echo $marker | sudo -u pzserver tee /home/pzserver/restore-marker >/dev/null"
   pw_before="$(vm_ssh 'sudo sha256sum /home/pzserver/pzsvrtool/.admin_password')"
   old_id="$(vm_ssh 'cloud-init query instance_id')"
+  resets_before="$(vm_ssh 'sudo grep -c "HEAD is now at" /var/log/cloud-init-output.log || true')"
 
   log "Apagando la VM y copiando su disco (equivale al snapshot)..."
   stop_vm
@@ -249,8 +263,9 @@ cmd_restore_test() {
   pw_after="$(vm_ssh 'sudo sha256sum /home/pzserver/pzsvrtool/.admin_password')"
 
   expect "instance-id nuevo ($old_id -> $new_id)" vm_ssh "[ \"\$(cloud-init query instance_id)\" = $new_id ]"
-  expect "user_data actualizó el checkout en lugar de clonar" vm_ssh 'sudo grep -q "HEAD is now at" /var/log/cloud-init-output.log'
-  expect "los datos del disco siguen ahí" vm_ssh "[ \"\$(cat /home/pzserver/restore-marker)\" = $marker ]"
+  expect "user_data actualizó el checkout en lugar de clonar" vm_ssh "[ \"\$(sudo grep -c 'HEAD is now at' /var/log/cloud-init-output.log)\" -gt $resets_before ]"
+  expect "los datos del disco siguen ahí" vm_ssh "[ \"\$(sudo cat /home/pzserver/restore-marker)\" = $marker ]"
+  expect "la partida guardada sigue ahí" vm_ssh "sudo test -d /home/pzserver/Zomboid/Saves/Multiplayer/$PZ_SERVER_NAME"
   expect "la contraseña de admin no cambió" test "$pw_before" = "$pw_after"
   expect "el juego vuelve a correr" wait_game
   expect "servicio activo" svc "is-active --quiet pzsvrtool@$PZ_SERVER_NAME.service"
