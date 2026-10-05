@@ -26,6 +26,7 @@ make tf-test            # terraform fmt/validate/test (mock_provider); suites en
 make bootstrap-test     # bootstrap/state-backend
 make user-data-check    # renderiza user_data sin backend (tests/render-user-data.sh): bash -n, shellcheck, < 16 KB
 make provision-test     # pz-provision con repos git locales (tests/provision)
+make snapshot-test      # pz-auto-snapshot.py con IMDS falso y boto3 simulado (tests/snapshot)
 make script-test        # pz-ctl.sh y destroy-and-backup.sh contra stubs (tests/script/bin)
 make ansible-test       # contraseñas, heap y configuración en localhost sin root (tests/ansible)
 terraform -chdir=terraform test -filter=tests/ssh.tftest.hcl   # una sola suite
@@ -42,7 +43,7 @@ En este entorno, `ansible`/`ansible-playbook` necesitan `</dev/null` (stdin no b
 
 ## Arquitectura: cómo se conectan las piezas
 
-1. **Terraform** (`terraform/main.tf`): security group (UDP 16261-16262, 8766; TCP 22 solo desde `ssh_allowed_cidrs`), EC2 Ubuntu (`m7i.large`) con un disco raíz gp3 (tags `pz-world-data-root`, `pz-world-volume=<nombre>`), Elastic IP, y política DLM con su rol. Lee `aws_ec2_instance_type` para verificar la RAM (heap + margen) y la arquitectura. Backend S3 (`backend.tf`); el bucket lo crea `bootstrap/state-backend`.
+1. **Terraform** (`terraform/main.tf`): security group (UDP 16261-16262, 8766; TCP 22 solo desde `ssh_allowed_cidrs`), EC2 Ubuntu con el tamaño de `tier` (`locals.tiers`; las variables explícitas ganan) y un disco raíz gp3 (tags `pz-world-data-root`, `pz-world-volume=<nombre>`), Elastic IP y un rol de IAM de la instancia con permisos mínimos para sus snapshots. Lee `aws_ec2_instance_type` para verificar la RAM (heap + margen) y la arquitectura. Backend S3 (`backend.tf`); el bucket lo crea `bootstrap/state-backend`.
 2. **`user_data`** (`templates/user_data.sh.tftpl`): instala Ansible, escribe `/etc/pz-provision.env` e instala y ejecuta `pz-provision` (`templates/pz-provision.sh`), que obtiene **el commit fijo** `repo_commit` de este repo desde GitHub, verifica `HEAD` y corre el playbook. El repo tiene que ser público.
 3. **Playbook** (`playbook/project-zomboid-server-install.yml`, conexión local):
    - Crea `pzserver`, el swap y linger, e instala pzsvrtool (`.deb` con versión y sha256 fijos), que envuelve SteamCMD y tmux.
@@ -58,7 +59,7 @@ En este entorno, `ansible`/`ansible-playbook` necesitan `</dev/null` (stdin no b
 - `aws_instance.pz_server` ignora `ami` y `user_data` a propósito: el disco raíz es el mundo, y cambiar `user_data` detiene y reinicia la instancia sin volver a ejecutarlo. Las actualizaciones de código van por `pz-ctl.sh provision`.
 - `pz-provision` nunca cae a otra revisión: si el commit no existe o `HEAD` no coincide, aborta.
 - Nunca hacer snapshot ni detener la EC2 sin una detención del juego confirmada (salvo `FORCE_SNAPSHOT`/`FORCE_STOP`). Toda llamada nueva a AWS/SSH/Terraform en los scripts necesita su comportamiento en los stubs de `tests/script/bin`. Dentro de `$(...)`, comprobar los errores de forma explícita (`inherit_errexit` está activo en `common.sh`).
-- Los snapshots que elige la restauración automática (`Name=pz-world-data-snapshot`) tienen que ser consistentes. Los de DLM se etiquetan `-auto`/`crash`, y el rol de DLM solo borra `pz-backup=auto`.
+- Los snapshots que elige la restauración automática (`Name=pz-world-data-snapshot`) tienen que ser consistentes. Los automáticos (`tasks/auto_snapshot.yml` + `files/pz-auto-snapshot.py`, un timer en la instancia, así que solo con ella prendida) se etiquetan `-auto`/`crash`, y el rol de la instancia solo borra `pz-backup=auto` de su servidor.
 - Secretos (contraseñas de admin e ingreso) solo en el host (0600), nunca en Terraform, `user_data`, Git ni logs: `no_log` en las tareas que los manejan. El renderizador de configuración nunca imprime valores.
 - La configuración en uso solo se reemplaza cuando cambia la revisión renderizada; los cambios manuales se avisan, no se pisan. Nunca se toca el orden de `Mods=`/`Map=`.
 - pzsvrtool trabaja en el directorio actual e imprime "Installation Completed" aunque falle: `chdir: "{{ pz_home }}"` y una verificación posterior (D24).

@@ -45,11 +45,23 @@ El procedimiento de respaldo DEBE (SHALL) salir con código distinto de cero ant
 - **THEN** el script sale con código distinto de cero y no realiza llamadas SSH ni a AWS
 
 ### Requirement: Snapshots automáticos con retención
-El stack DEBE (SHALL) crear, salvo que se desactive, una política DLM diaria con hora y retención configurables que solo apunte al volumen de este servidor y que solo pueda borrar los snapshots que ella crea.
+Salvo que se desactive, la propia instancia DEBE (SHALL) hacer un snapshot automático de su disco del mundo una vez por día y solo mientras está prendida (a la hora configurada o, si estaba apagada, al prender), y DEBE (SHALL) conservar los `backup_retain_count` más nuevos borrando solo snapshots automáticos completados de su servidor.
 
 #### Scenario: Valores por defecto
 - **WHEN** se planifica con valores por defecto
-- **THEN** hay un snapshot diario a las 09:00 UTC con 7 copias sobre `pz-world-volume=<nombre>`
+- **THEN** la instancia recibe un timer diario a las 09:00 UTC que conserva 4 snapshots automáticos, y un rol que solo puede crear snapshots del volumen con `pz-world-volume=<nombre>` y borrar los `pz-backup=auto` de su servidor
+
+#### Scenario: Rotación
+- **WHEN** hay 6 automáticos y se crea uno nuevo con retención 4
+- **THEN** se borran los 3 más viejos y ningún snapshot manual ni de otro servidor
+
+#### Scenario: Snapshot reciente
+- **WHEN** el último automático tiene menos de 12 horas
+- **THEN** no se crea otro
+
+#### Scenario: Fuera de EC2
+- **WHEN** no hay metadatos de instancia (VM local)
+- **THEN** el script termina sin hacer nada
 
 ### Requirement: Consistencia declarada
 Los snapshots tomados con el juego detenido y confirmado DEBEN (SHALL) etiquetarse `pz-consistency=application` y `Name=pz-world-data-snapshot`; los automáticos DEBEN (SHALL) etiquetarse `crash` con otro `Name`, y los forzados `unconfirmed`, de modo que la restauración automática solo elija los consistentes.

@@ -26,7 +26,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - **Migración:** `repo_commit` es obligatorio (SHA de `main` mergeado y probado). Cambiarlo no reinicia la instancia; se aplica con `script/pz-ctl.sh provision`.
 - **Migración:** estado remoto en S3 con bloqueo nativo (`terraform/backend.tf`, Terraform ≥ 1.11). Crear el bucket con `bootstrap/state-backend` y migrar con `terraform init -backend-config=backend.hcl -migrate-state` ([#16](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/16)).
 - **Migración:** sin `ssh_allowed_cidrs` no hay SSH; declarar las redes administrativas.
-- Tipo de instancia por defecto `m7i.large` (no burstable) con heap de 4096 MB gestionado por Ansible; Terraform y Ansible rechazan un host sin RAM para heap + margen ([#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)).
+- Tier por defecto `estandar`: `m7i.large` (no burstable) con heap de 4096 MB gestionado por Ansible; Terraform y Ansible rechazan un host sin RAM para heap + margen ([#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)).
 - `public_ip` es una Elastic IP estable; las sesiones usan `pz-ctl.sh stop/start` y `destroy-and-backup.sh` queda para la baja definitiva. La IP cambia una vez al migrar ([#9](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/9)).
 - Con `pz_wait_for_config` (por defecto en Terraform), un servidor nuevo no arranca el juego hasta `pz-ctl.sh push-config`; un disco con mundo existente arranca igual.
 - Los snapshots manuales llevan los tags `pz-server`, `pz-backup` y `pz-consistency`.
@@ -45,10 +45,11 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 ### Agregado
 - `script/pz-ctl.sh`: `status`, `start`, `stop`, `backup`, `provision`, `push-config`, `join-password`, `rotate-join-password` y `metrics` ([#8](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/8), [#9](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/9), [#10](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/10)).
 - Configuración del juego versionada: `push-config` sube `.ini`, SandboxVars y spawns desde git; Ansible valida, guarda una copia, aplica con apagado ordenado y no pisa los cambios manuales ([#8](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/8)).
-- Política DLM: un snapshot diario y 7 copias, con permisos mínimos (marcados crash-consistent), y `pz-ctl.sh backup` para snapshots consistentes sin destruir ([#10](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/10)).
+- Snapshots automáticos diarios hechos por la propia instancia, **solo los días que está prendida**: se conservan 4, con permisos mínimos y marcados crash-consistent. Además, `pz-ctl.sh backup` para snapshots consistentes sin destruir ([#10](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/10)).
+- `tier` (`minimo`, `estandar`, `robusto`, `grande`): perfiles de instancia, heap y disco con una tabla de recomendaciones y costos; las variables individuales los reemplazan ([#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)).
 - `bootstrap/state-backend`: bucket del estado versionado, cifrado y privado ([#16](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/16)).
 - `docs/costs.md` (costos, tamaño, región y prueba de carga) y una sección de costos en el README; `docs/operations.md` reorganizado como runbook.
-- Tests: suites de Terraform `sizing`, `sessions` y `backups`, `make bootstrap-test`, `make provision-test`, tests de `pz-ctl.sh`, de la configuración y de la contraseña de ingreso en Ansible, y `make local-config-test`.
+- Tests: suites de Terraform `sizing`, `sessions` y `backups`, `make bootstrap-test`, `make provision-test`, `make snapshot-test`, tests de `pz-ctl.sh`, de la configuración y de la contraseña de ingreso en Ansible, y `make local-config-test`.
 - Pruebas locales con una VM QEMU/KVM que imita la EC2 (`make local-up`, `local-check`, `local-reboot-test`, `local-backup-test`, `local-restore-test`, `local-test`), sin AWS ([#14](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/14)).
 - Variables de Terraform `repo_url` y `repo_branch` para elegir qué rama clona la instancia; `SSH_PORT` en el script de backup.
 - `openspec/`: specs de comportamiento (7 capacidades) y las propuestas, diseños y tareas archivados de #1–#5 y #14.

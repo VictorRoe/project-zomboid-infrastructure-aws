@@ -7,7 +7,7 @@ Cómo encajan las piezas de este repo. Los valores actuales están en [spec.md](
 | Capa | Dónde | Responsabilidad |
 |---|---|---|
 | Estado remoto | `bootstrap/state-backend/` | Bucket S3 del estado de Terraform (versionado, cifrado, privado), con su propio estado local |
-| Terraform | `terraform/` | Security group, EC2 con un único disco raíz gp3, Elastic IP, política DLM y su rol de IAM. Backend S3 con bloqueo |
+| Terraform | `terraform/` | Security group, EC2 (tamaño por `tier`) con un único disco raíz gp3, Elastic IP y el rol de IAM de la instancia para sus snapshots. Backend S3 con bloqueo |
 | Arranque | `terraform/templates/user_data.sh.tftpl` + `pz-provision.sh` | Instala Ansible, obtiene **el commit fijado** de este repo (verifica `HEAD`) y ejecuta el playbook en la instancia |
 | Ansible | `playbook/` | Usuario `pzserver`, swap, pzsvrtool, juego, heap, contraseñas, configuración subida, servicios systemd de usuario, actualización automática, UFW |
 | Operación | `script/pz-ctl.sh`, `script/destroy-and-backup.sh` | Corren en la máquina del operador: sesiones, backups, configuración, contraseñas, reaprovisionar, baja |
@@ -23,11 +23,11 @@ No hay CI ni pipeline de imágenes.
 │ terraform apply ──────────┼────▶ │ S3 pz-tfstate-* (estado + .tflock)               │
 │                           │      │ SG pz-server-sg: UDP 16261-16262, 8766           │
 │ pz-ctl.sh                 │      │                  TCP 22 solo ssh_allowed_cidrs   │
-│  start/stop ── aws ec2 ───┼────▶ │ Elastic IP ──▶ EC2 PZ-Server-Instance (m7i.large)│
+│  start/stop ── aws ec2 ───┼────▶ │ Elastic IP ──▶ EC2 PZ-Server-Instance (tier)     │
 │  backup ─── ssh + snapshot┼────▶ │   disco gp3 30 GB (pz-world-volume=<nombre>)     │
 │  push-config ── ssh+tar ──┼────▶ │   └ cloud-init → pz-provision <commit fijo>      │
 │  provision ─── ssh ───────┼────▶ │       └ git (este repo, público) → Ansible local │
-│ destroy-and-backup.sh     │      │ DLM: snapshot diario, 7 copias (pz-backup=auto)  │
+│ destroy-and-backup.sh     │      │   └ timer: snapshot diario si está prendida (4)  │
 └───────────────────────────┘      │ Snapshots pz-world-data-snapshot[-auto]          │
                                    └──────────────────────────────────────────────────┘
 ```
@@ -35,7 +35,8 @@ No hay CI ni pipeline de imágenes.
 ## Estructura en el host (después del playbook)
 
 ```
-/etc/pz-provision.env                    # repo, rama, commit, nombre, heap (de Terraform; sin secretos)
+/etc/pz-provision.env                    # repo, rama, commit, nombre, heap, snapshots (de Terraform; sin secretos)
+/usr/local/sbin/pz-auto-snapshot         # + /etc/pz-auto-snapshot.env y pz-auto-snapshot.{service,timer}
 /usr/local/sbin/pz-provision             # obtiene el commit fijado y corre el playbook
 /var/lib/pz-provision/revision           # commit aplicado, modo y fecha
 /home/ubuntu/repo/                       # checkout (detached) de este repo
@@ -63,7 +64,7 @@ El juego corre como **servicio systemd de usuario** `pzsvrtool@<nombre>.service`
 - **Configuración del stack:** variables de Terraform → outputs → scripts del operador, y → `/etc/pz-provision.env` → playbook (`pz_server_name`, heap, espera de configuración). No hardcodear estos valores en otro lado.
 - **Revisión del código:** `repo_commit` → `user_data` (solo al crear la instancia) y output → `pz-ctl.sh provision` (hosts en marcha). Los cambios de `user_data` se ignoran en una instancia existente.
 - **Puertos:** se declaran en el security group (`terraform/main.tf`), en UFW (`pz_udp_ports`) y en el `.ini` (`DefaultPort`/`UDPPort`, validados al subir). Tienen que coincidir. El origen de SSH se filtra solo en el security group.
-- **Tags de snapshot:** `Name=pz-world-data-snapshot` (consistente: lo escriben los scripts y lo elige la restauración automática) y `pz-world-data-snapshot-auto` (DLM; solo se restaura a mano). `pz-world-volume=<nombre>` une el disco con la política DLM.
+- **Tags de snapshot:** `Name=pz-world-data-snapshot` (consistente: lo escriben los scripts y lo elige la restauración automática) y `pz-world-data-snapshot-auto` (el timer de la instancia; solo se restaura a mano). `pz-world-volume=<nombre>` limita al disco de este servidor los permisos del rol de la instancia.
 - **Configuración del juego:** el directorio del operador (git) → `config-staged` → renderizado (contraseña gestionada) → `Zomboid/Server`. Los nombres de archivo son `pz_server_name`.
 - **Entrega del código:** `git` desde GitHub al arrancar, así que el repo tiene que ser público y el commit tiene que existir en `repo_branch` (o ser alcanzable por SHA).
 
@@ -77,10 +78,10 @@ El juego corre como **servicio systemd de usuario** `pzsvrtool@<nombre>.service`
 
 | Issue | Resumen | Decisión |
 |---|---|---|
-| ~~[#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)~~ | `m7i.large` no burstable, heap gestionado y RAM verificada (falta la prueba de carga real) | D33 |
+| ~~[#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)~~ | Tiers de tamaño (`estandar` = `m7i.large`), heap gestionado y RAM verificada (falta la prueba de carga real) | D33, D39 |
 | ~~[#8](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/8)~~ | Configuración del juego provista por el operador, validada, versionada y aplicada con backup | D31 |
 | ~~[#9](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/9)~~ | Sesiones con stop/start y Elastic IP | D29 |
-| ~~[#10](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/10)~~ | DLM diario más backups consistentes a pedido | D30 |
+| ~~[#10](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/10)~~ | Snapshot diario solo con la instancia prendida (se conservan 4) más backups consistentes a pedido | D30, D38 |
 | ~~[#11](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/11)~~ | Comparación de regiones medida; se mantiene us-east-1 | D34 |
 | ~~[#12](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/12)~~ | Seguimiento de #16–#19 | — |
 | ~~[#13](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/13)~~ | Contraseña de ingreso gestionada | D32 |
@@ -91,4 +92,4 @@ El juego corre como **servicio systemd de usuario** `pzsvrtool@<nombre>.service`
 
 ### Pendiente de verificar en AWS (D37)
 
-La búsqueda real de la AMI, el arranque de una imagen restaurada, la Elastic IP, la ejecución de DLM con sus permisos mínimos, la migración del estado al backend S3 y su bloqueo, stop/start real, la prueba de carga y el ingreso con un cliente real (contraseña correcta e incorrecta).
+La búsqueda real de la AMI, el arranque de una imagen restaurada, la Elastic IP, el timer de snapshots con los permisos mínimos del rol, la migración del estado al backend S3 y su bloqueo, stop/start real, la prueba de carga y el ingreso con un cliente real (contraseña correcta e incorrecta).

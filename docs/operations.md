@@ -15,6 +15,7 @@ Todo se maneja desde la máquina del operador con Terraform y `script/pz-ctl.sh`
 | Cambiar la contraseña de ingreso | `script/pz-ctl.sh rotate-join-password` |
 | Actualizar el código del servidor | `repo_commit` nuevo → `terraform apply` → `script/pz-ctl.sh provision` |
 | Medir RAM/CPU | `script/pz-ctl.sh metrics 60 60` |
+| Cambiar de tier | `stop` → `tier = "…"` → `terraform apply` → `start` → `provision` |
 | Dar de baja conservando el mundo | `script/destroy-and-backup.sh` |
 | Probar sin AWS | `make test` y `make local-test` |
 
@@ -45,7 +46,8 @@ repo_commit       = "<SHA de 40 caracteres de main, ya mergeado y probado>"  # g
 ssh_public_key    = "ssh-ed25519 AAAA... vos@host"     # o: ssh_key_name = "par-existente"
 ssh_allowed_cidrs = ["203.0.113.4/32"]                 # tu IP pública: curl -s https://checkip.amazonaws.com
 pz_server_name    = "miserver"                         # = nombre de los archivos de configuración
-# Opcionales: aws_region, instance_type, pz_java_xmx_mb (ver costs.md), backup_time_utc, backup_retain_count
+tier              = "estandar"                         # minimo | estandar | robusto | grande (ver costs.md)
+# Opcionales: aws_region, instance_type/pz_java_xmx_mb/root_volume_size_gb (reemplazan al tier), backup_time_utc, backup_retain_count
 ```
 
 ### 1.3 Crear, configurar y jugar
@@ -53,7 +55,7 @@ pz_server_name    = "miserver"                         # = nombre de los archivo
 ```bash
 cd terraform
 terraform init -backend-config=backend.hcl
-terraform apply                                         # EC2 + Elastic IP + SG + política DLM
+terraform apply                                         # EC2 + Elastic IP + SG + rol de IAM para snapshots
 ../script/pz-ctl.sh status                              # esperar ~10 min al primer aprovisionamiento
 ../script/pz-ctl.sh push-config ~/mi-config             # el juego espera esto antes de crear el mundo
 ../script/pz-ctl.sh join-password                       # pasarla a los jugadores por un canal privado
@@ -78,7 +80,8 @@ script/pz-ctl.sh status
 
 ### Backups
 
-- **Automáticos:** DLM toma un snapshot diario (`backup_time_utc`, 09:00 UTC por defecto) y conserva `backup_retain_count` (7). Se etiquetan `Name=pz-world-data-snapshot-auto` y `pz-consistency=crash`: si el juego estaba corriendo, son *crash-consistent* (como un corte de luz). La restauración automática no los elige, así que hay que pasarlos a mano.
+- **Automáticos:** la propia instancia hace un snapshot por día, **solo los días que está prendida**: a las `backup_time_utc` (09:00 UTC) o, si a esa hora estaba apagada, al volver a prenderla. Se conservan los últimos `backup_retain_count` (4): al crear uno nuevo se borra el más viejo de los automáticos. Los manuales nunca se borran solos. Se etiquetan `Name=pz-world-data-snapshot-auto` y `pz-consistency=crash`: con el juego corriendo son *crash-consistent* (como un corte de luz), así que la restauración automática no los elige y hay que pasarlos a mano. Log: `ssh ubuntu@<ip> journalctl -u pz-auto-snapshot.service`.
+- **¿Se pisan?** No. Cada snapshot es una copia independiente de un momento. Son incrementales (solo guardan lo que cambió) y borrar uno no rompe a los demás.
 - **Consistente a pedido:** `script/pz-ctl.sh backup` detiene el juego, hace el snapshot (`pz-world-data-snapshot`, `pz-consistency=application`) y lo vuelve a iniciar (con la EC2 detenida, no hace falta detener nada). Conviene antes de cambios grandes.
 - Listar: `aws ec2 describe-snapshots --owner-ids self --filters Name=tag:pz-server,Values=<nombre> --query 'Snapshots[].[SnapshotId,StartTime,Tags[?Key==\`Name\`].Value|[0]]' --output table`.
 - Objetivos: pérdida máxima de hasta 24 h (RPO) con los automáticos, o la del último backup consistente. Tiempo de recuperación (RTO) objetivo: 1 hora (apply + arranque + aprovisionamiento; sin medir todavía en AWS).
@@ -122,7 +125,7 @@ Si el commit no existe o no coincide, `pz-provision` aborta sin usar otra revisi
 ### Actualizaciones del juego y heap
 
 - El juego se actualiza solo dentro de la ventana 03:00–06:00 (Argentina): avisa, se apaga en orden, hace un backup, reinstala y vuelve a fijar el heap.
-- Cambiar el heap o el tipo de instancia: `pz-ctl.sh stop` → `terraform apply -var instance_type=… -var pz_java_xmx_mb=…` → `pz-ctl.sh start` → `pz-ctl.sh provision`. El plan falla si la instancia no tiene RAM para heap + margen.
+- Cambiar de tier (o de heap o instancia): `pz-ctl.sh stop` → `tier = "robusto"` (o las variables) y `terraform apply` → `pz-ctl.sh start` → `pz-ctl.sh provision` (aplica el heap nuevo). El plan falla si la instancia no tiene RAM para heap + margen. El disco solo puede crecer, y el sistema de archivos se agranda solo al arrancar.
 
 ### SSH
 
@@ -162,7 +165,7 @@ Si se perdió la instancia (falla de la AZ o del disco): elegir el último snaps
 script/destroy-and-backup.sh       # detener el juego → snapshot consistente → terraform destroy
 ```
 
-Elimina la EC2, el disco, la Elastic IP (deja de cobrarse), el security group, la política DLM y su rol. Quedan los snapshots (manuales y automáticos), que siguen costando. Con la EC2 ya detenida, no hace falta SSH. `FORCE_SNAPSHOT=1` hace el snapshot aunque no se confirme la detención (queda `pz-consistency=unconfirmed`).
+Elimina la EC2, el disco, la Elastic IP (deja de cobrarse), el security group y el rol de IAM. Quedan los snapshots (manuales y automáticos), que siguen costando. Con la EC2 ya detenida, no hace falta SSH. `FORCE_SNAPSHOT=1` hace el snapshot aunque no se confirme la detención (queda `pz-consistency=unconfirmed`).
 
 ## 6. Destruir todo
 
@@ -207,4 +210,4 @@ make local-down           # apaga (el disco queda); make local-clean borra disco
 
 Con la VM corriendo se puede jugar contra `127.0.0.1:16261` con la contraseña de `local/vm.sh ssh 'sudo cat /home/pzserver/pzsvrtool/.join_password'`. Variables: `LOCAL_VM_MEM` (10240), `LOCAL_VM_CPUS` (4), `LOCAL_VM_DISK` (40G), `LOCAL_SSH_PORT` (2222), `LOCAL_GIT_PORT` (8730), `PROVISION_TIMEOUT` (3600 s).
 
-**No cubre:** la búsqueda real de la AMI, el arranque en hardware de AWS, los snapshots EBS, DLM, la Elastic IP, el security group, el backend S3 ni el ingreso de un cliente real.
+**No cubre:** la búsqueda real de la AMI, el arranque en hardware de AWS, los snapshots EBS reales, la Elastic IP, el security group, el backend S3 ni el ingreso de un cliente real.

@@ -4,7 +4,7 @@ Secuencias que atraviesan varios archivos. Los componentes se describen en [arch
 
 ## 1. Aprovisionamiento (`terraform apply`)
 
-1. Terraform lee el tipo de instancia (RAM, arquitectura, burstable) y la AMI de Ubuntu 24.04 de la región (o `ami_id`). Rechaza un tipo sin RAM para heap + margen o que no sea x86_64, y avisa si es burstable o si falta SSH. Después crea el security group, la instancia, la Elastic IP y la política DLM con su rol.
+1. Terraform lee el tipo de instancia (RAM, arquitectura, burstable) y la AMI de Ubuntu 24.04 de la región (o `ami_id`). Rechaza un tipo sin RAM para heap + margen o que no sea x86_64, y avisa si es burstable o si falta SSH. Resuelve el tier (instancia, heap, margen y disco; las variables explícitas ganan). Después crea el security group, el rol de IAM de la instancia, la instancia y la Elastic IP.
 2. cloud-init ejecuta `user_data` como root: instala Ansible desde su PPA, escribe `/etc/pz-provision.env`, instala `/usr/local/sbin/pz-provision` y lo ejecuta.
 3. `pz-provision`:
    1. Valida que `REPO_COMMIT` sea un SHA de 40 caracteres, salvo en modo rama.
@@ -21,7 +21,7 @@ Secuencias que atraviesan varios archivos. Los componentes se describen en [arch
       4. Sin configuración nueva, avisa las claves del `.ini` editadas a mano, sin pisarlas.
    4. Instala los drop-ins del servicio. Con `pz_wait_for_config`, el servicio solo arranca si hay configuración aplicada o un mundo existente.
    5. Si corresponde, inicia el servicio y espera al proceso. Si no, informa que espera `push-config`.
-   6. Instala el timer de actualización automática y configura UFW (SSH, después los puertos del juego, y por último lo activa).
+   6. Instala el timer de actualización automática y el de snapshots diarios, y configura UFW (SSH, después los puertos del juego, y por último lo activa).
 5. `terraform output -raw public_ip` es la Elastic IP que usan los jugadores (UDP 16261).
 
 ## 2. Configuración del juego (`pz-ctl.sh push-config <dir>`)
@@ -54,7 +54,11 @@ Secuencias que atraviesan varios archivos. Los componentes se describen en [arch
 
 ## 4. Backups
 
-- **Automático (DLM):** todos los días a `backup_time_utc` (DLM arranca dentro de esa hora), snapshot del volumen con `pz-world-volume=<nombre>` y los tags `pz-world-data-snapshot-auto`, `pz-backup=auto` y `pz-consistency=crash`. Al superar `backup_retain_count`, borra el más viejo de los suyos. Los manuales no se tocan.
+- **Automático (en la instancia):**
+  - `pz-auto-snapshot.timer` (systemd, `Persistent=true`) corre a `backup_time_utc`, o al prender si a esa hora estaba apagada. Con la EC2 apagada no corre, así que no hay snapshots de días apagada.
+  - El script obtiene la instancia y la región por IMDSv2, busca su volumen con `pz-world-volume=<nombre>` y no hace nada si el último automático tiene menos de 12 h.
+  - Hace el snapshot con `sync` previo y los tags `pz-world-data-snapshot-auto`, `pz-backup=auto`, `pz-consistency=crash` y `pz-server`.
+  - Rota: borra los automáticos completados de este servidor que excedan `backup_retain_count` (4). Los manuales no se tocan, y el rol de IAM tampoco lo permitiría.
 - **A pedido (`pz-ctl.sh backup`):**
   - Con la EC2 corriendo: detiene el juego y lo confirma, hace el snapshot (`pz-world-data-snapshot`, `pz-consistency=application`), espera `completed` y vuelve a iniciar el juego. El reinicio corre aunque falle el snapshot.
   - Con la EC2 detenida: snapshot directo.
@@ -83,7 +87,7 @@ El timer se dispara 10 minutos después del arranque y luego cada `pz_update_che
 1. Lee `aws_region`, `pz_server_name`, `public_ip`, `root_volume_id` e `instance_id` de los outputs (`AWS_REGION`, `PZ_SERVER_NAME` e `INSTANCE_ID` los reemplazan). Si falta alguno, sale antes de tocar nada. Sin SSH configurado (y sin `FORCE_SNAPSHOT`), también sale.
 2. Si la EC2 está detenida, el disco ya es consistente. Si no, detiene el juego y lo confirma; si no puede, **aborta** (`FORCE_SNAPSHOT=1` sigue con `pz-consistency=unconfirmed`).
 3. Hace el snapshot del disco raíz con los tags de restauración y espera `completed`. Si falla, no destruye nada.
-4. `terraform destroy`: elimina la instancia, el disco, la Elastic IP, el security group y la política DLM con su rol. Quedan los snapshots.
+4. `terraform destroy`: elimina la instancia, el disco, la Elastic IP, el security group y el rol de IAM. Quedan los snapshots.
 
 ## 8. Restauración (`terraform apply` después de una baja)
 

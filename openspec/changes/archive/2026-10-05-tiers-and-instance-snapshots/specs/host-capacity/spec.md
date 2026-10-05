@@ -1,9 +1,4 @@
-# host-capacity Specification
-
-## Purpose
-Garantiza que la instancia y el heap de Java del servidor sean coherentes: RAM suficiente verificada antes de crear y en el host, aviso de CPU burstable y heap gestionado.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: RAM suficiente verificada
 El stack DEBE (SHALL) rechazar en el plan un tipo de instancia sin RAM nominal para el heap y el margen efectivos (del tier o de las variables) o que no sea x86_64, y el playbook DEBE (SHALL) rechazar un host cuya RAM utilizable (sin swap) no alcance.
@@ -16,19 +11,7 @@ El stack DEBE (SHALL) rechazar en el plan un tipo de instancia sin RAM nominal p
 - **WHEN** se planifica con valores por defecto
 - **THEN** el tier `estandar` (`m7i.large` con 4096 + 3072 MiB) es aceptado
 
-### Requirement: Aviso de CPU burstable
-El plan DEBE (SHALL) advertir cuando el tipo de instancia es de CPU burstable.
-
-#### Scenario: t3.large
-- **WHEN** `instance_type = "t3.large"`
-- **THEN** el check `burstable_cpu` falla como advertencia
-
-### Requirement: Heap gestionado
-El aprovisionamiento DEBE (SHALL) fijar `-Xmx<pz_java_xmx_mb>m` en `ProjectZomboid64.json`, bajar un `-Xms` mayor y volver a fijarlo después de cada actualización del juego.
-
-#### Scenario: Heap distinto
-- **WHEN** el JSON tiene `-Xmx4g` y `-Xms6g` y el valor es 4096
-- **THEN** queda `-Xmx4096m` y `-Xms4096m`, y se pide detener el juego si corría
+## ADDED Requirements
 
 ### Requirement: Tiers de tamaño
 El stack DEBE (SHALL) ofrecer los tiers `minimo`, `estandar` (por defecto), `robusto` y `grande`, cada uno con instancia, heap, margen y disco, DEBE (SHALL) permitir reemplazar cada valor con su variable y DEBE (SHALL) rechazar un tier desconocido.

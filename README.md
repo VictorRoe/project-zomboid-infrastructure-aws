@@ -12,20 +12,20 @@ cd terraform && terraform init -backend-config=backend.hcl && terraform apply
 
 ## Arquitectura
 
-Una EC2 Ubuntu 24.04 (`m7i.large`, 2 vCPU, 8 GiB, no burstable) con un único disco gp3 de 30 GB que contiene SO, juego y mundo, más una Elastic IP y un security group (UDP 16261–16262 y 8766; SSH solo desde las redes que se declaren). Al crearse, la instancia clona **este repo en un commit fijo** y se configura sola con Ansible: pzsvrtool como servicio systemd, heap de Java, contraseñas y la configuración que sube el operador. DLM toma un snapshot diario del disco. El estado de Terraform vive en S3, con bloqueo. Detalle en [docs/architecture.md](docs/architecture.md).
+Una EC2 Ubuntu 24.04, del tamaño que define el tier, con un único disco gp3 que contiene SO, juego y mundo, más una Elastic IP y un security group (UDP 16261–16262 y 8766; SSH solo desde las redes que se declaren). Al crearse, la instancia clona **este repo en un commit fijo** y se configura sola con Ansible: pzsvrtool como servicio systemd, heap de Java, contraseñas y la configuración que sube el operador. La propia instancia toma un snapshot diario del disco, solo los días que está prendida, y conserva los últimos 4. El estado de Terraform vive en S3, con bloqueo. Detalle en [docs/architecture.md](docs/architecture.md).
 
-## Costos estimados
+## Tiers y costos estimados
 
-Con los valores por defecto (`us-east-1`, `m7i.large`, 30 GB gp3, Elastic IP, 7 snapshots diarios), en USD por mes, sin impuestos. Precios consultados el 2026-10-05.
+Se elige un tier en `terraform.tfvars` (`tier = "estandar"` por defecto). Cada uno fija la instancia, el heap de Java y el disco; cualquier variable explícita lo reemplaza. USD por mes en `us-east-1`, sin impuestos, con precios del 2026-10-05:
 
-| Uso | Costo aproximado |
-|---|---|
-| 60 h de juego al mes (`pz-ctl.sh stop` entre sesiones) | **~12,70** |
-| Encendido 24/7 | **~80** |
-| Detenido todo el mes (disco + Elastic IP + snapshots) | ~6,65 |
-| Dado de baja con `destroy-and-backup.sh` (solo snapshots) | ~0,60 |
+| Tier | Recomendado para | Instancia | Heap | Disco | 60 h de juego/mes | 24/7 |
+|---|---|---|---|---|---|---|
+| `minimo` | Probar, 1–2 jugadores sin mods | `t3.medium` (4 GiB, burstable) | 2 GB | 30 GB | ~9 | ~37 |
+| `estandar` | Grupo chico, pocos mods | `m7i.large` (8 GiB) | 4 GB | 30 GB | **~12,70** | ~80 |
+| `robusto` | Muchos mods (~250), 4–8 jugadores | `r7i.large` (16 GiB) | 8 GB | 50 GB | ~17 | ~105 |
+| `grande` | Muchos mods, más jugadores y CPU | `m7i.xlarge` (4 vCPU, 16 GiB) | 10 GB | 60 GB | ~22 | ~157 |
 
-La EC2 se cobra solo mientras está encendida (0,10 USD/h). El disco (2,40), la Elastic IP (3,65) y los snapshots se cobran siempre. En `sa-east-1` la latencia desde Argentina es mucho menor (~34 ms contra ~166 ms), pero cuesta ~60 % más. Desglose, tamaños para servidores con muchos mods, la comparación de regiones y las fuentes: [docs/costs.md](docs/costs.md).
+La EC2 se cobra solo mientras está encendida (`pz-ctl.sh stop` entre sesiones). El disco, la Elastic IP (3,65) y los snapshots se cobran siempre: unos 6,65 USD/mes detenido en `estandar`. Después de `destroy-and-backup.sh` quedan solo los snapshots (~0,60). En `sa-east-1` la latencia desde Argentina es mucho menor (~34 ms contra ~166 ms), pero cuesta ~60 % más. Desglose, criterios para elegir tier, comparación de regiones y fuentes: [docs/costs.md](docs/costs.md).
 
 ## Documentación
 
