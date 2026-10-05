@@ -25,14 +25,29 @@ FORCE_SNAPSHOT=1 ../script/destroy-and-backup.sh      # último recurso: snapsho
 
 ## En el servidor
 
+El servidor arranca solo: al crearse la instancia, en cada reinicio de la máquina (servicio habilitado con linger) y después de cada actualización del juego. Los comandos de abajo son para manejarlo a mano.
+
+`systemctl --user` y `journalctl --user` necesitan el entorno del bus de usuario de `pzserver`; `sudo -iu pzserver` no lo arma. Por eso se usa `XDG_RUNTIME_DIR` explícito:
+
 ```bash
+PZ="sudo -u pzserver env XDG_RUNTIME_DIR=/run/user/$(id -u pzserver)"
+
+$PZ systemctl --user status  pzsvrtool@zomboid.service    # estado
+$PZ systemctl --user start   pzsvrtool@zomboid.service    # iniciar
+$PZ systemctl --user stop    pzsvrtool@zomboid.service    # detener
+$PZ systemctl --user restart pzsvrtool@zomboid.service    # reiniciar
+$PZ systemctl --user list-timers pz-auto-update.timer     # próximo chequeo de actualización
+$PZ journalctl --user -u pz-auto-update.service           # logs de actualización
+
 sudo cat /home/pzserver/pzsvrtool/.admin_password    # contraseña del admin root (pzadmin)
-sudo -iu pzserver pzsvrtool console
-sudo -iu pzserver systemctl --user status pzsvrtool@zomboid.service
-sudo -iu pzserver systemctl --user list-timers pz-auto-update.timer
-sudo -iu pzserver journalctl --user -u pz-auto-update.service
-sudo tail -f /var/log/cloud-init-output.log    # log del aprovisionamiento en el primer arranque
+sudo -iu pzserver pzsvrtool console                  # consola del servidor (tmux)
+sudo -iu pzserver pzsvrtool message "Reinicio en 5 minutos"   # aviso a los jugadores
+sudo -iu pzserver pzsvrtool quit --time 5            # apagado ordenado con cuenta regresiva
+sudo -iu pzserver pzsvrtool backupnow                # backup inmediato
+sudo tail -f /var/log/cloud-init-output.log          # log del aprovisionamiento en el primer arranque
 ```
+
+Si el servidor no se llama `zomboid`, reemplazar el nombre del servicio por `pzsvrtool@<pz_server_name>.service`.
 
 ## Restauración
 

@@ -73,3 +73,7 @@ Las entradas nuevas van al final. Cada entrada registra qué se decidió, por qu
 Por qué: que no se pierdan. Consecuencia: el orden sugerido es #7 → #8 → #9/#10 → #13. Cada uno se trabaja como un cambio de OpenSpec propio.
 
 **D21. Toda la documentación y los artefactos de OpenSpec están en castellano.** Los marcadores estructurales de OpenSpec quedan en inglés (`## Purpose`, `### Requirement:`, `#### Scenario:`, `WHEN`/`THEN`) y los requisitos usan "DEBE (SHALL)", porque el validador exige esas palabras clave. Los identificadores, comandos y rutas no se traducen. Por qué: lo pidió el mantenedor. Consecuencia: `openspec/config.yaml` indica escribir los artefactos nuevos en castellano.
+
+**D22. Los comandos de operación usan `XDG_RUNTIME_DIR` explícito para `systemctl --user`/`journalctl --user`.** `docs/operations.md` y el mensaje final del playbook recomendaban `sudo -iu pzserver systemctl --user …`, que puede no llegar al bus de usuario (el mismo problema que D14 corrigió en el script). Ahora usan `sudo -u pzserver env XDG_RUNTIME_DIR=/run/user/<uid> …`, igual que el playbook y el script. Por qué: consistencia entre la documentación y el código, encontrada al revisar cómo se inicia el servidor. Consecuencias:
+- Los comandos de pzsvrtool (`console`, `message`, `quit`, `backupnow`) siguen con `sudo -iu`, porque no usan systemd.
+- No se verificó en una instancia real; la forma explícita funciona en ambos casos.

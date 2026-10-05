@@ -630,9 +630,9 @@
             ({{ pz_update_timezone }}), chequeo cada {{ pz_update_check_minutes }} minutos.
           - "Contraseña de admin ({{ pz_admin_name }}): sudo cat {{ pz_admin_password_file }}"
           - "Console: sudo -iu {{ pz_user }} pzsvrtool console"
-          - "Estado del servicio: sudo -iu {{ pz_user }} systemctl --user status pzsvrtool@{{ pz_server_name }}.service"
-          - "Timer de actualización: sudo -iu {{ pz_user }} systemctl --user list-timers pz-auto-update.timer"
-          - "Logs de actualización: sudo -iu {{ pz_user }} journalctl --user -u pz-auto-update.service"
+          - "Estado del servicio: sudo -u {{ pz_user }} env XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} systemctl --user status pzsvrtool@{{ pz_server_name }}.service"
+          - "Timer de actualización: sudo -u {{ pz_user }} env XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} systemctl --user list-timers pz-auto-update.timer"
+          - "Logs de actualización: sudo -u {{ pz_user }} env XDG_RUNTIME_DIR=/run/user/{{ pz_uid }} journalctl --user -u pz-auto-update.service"
 
   handlers:
     - name: Reload system systemd
