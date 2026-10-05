@@ -30,7 +30,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         
       - name: Validar Config
-        uses: cd terraform/ && terraform validate
+        run: cd terraform/ && terraform validate
         
       - name: Generar Plan de Terraform
         run: cd terraform/ && terraform plan -no-color -out=tfplan
