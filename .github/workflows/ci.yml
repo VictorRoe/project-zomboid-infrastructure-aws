@@ -1,0 +1,37 @@
+name: "CI Terraform"
+
+on:
+  pull_request:
+    branches: ["main", "release/**", "fix/**", "feature/**"]
+
+jobs:
+  ci-terraform:
+    name: "Terraform CI (Validates & Plan)"
+    runs-on: "ubuntu-latest"
+      
+    steps:
+      - name: Checkout Codigo
+        uses: actions/checkout@v7
+      
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.5"
+      
+      - name: Formato y Linting
+        run: cd terraform/ && terraform fmt -check
+      
+      - name: Inicializar Terraform
+        run: cd terraform/ && terraform init
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        
+      - name: Validar Config
+        uses: cd terraform/ && terraform validate
+        
+      - name: Generar Plan de Terraform
+        run: cd terraform/ && terraform plan -no-color -out=tfplan
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
