@@ -48,10 +48,23 @@ data "aws_ami" "ubuntu" {
 
 # RAM, arquitectura y CPU burstable del tipo elegido (lectura de la API, sin costo).
 data "aws_ec2_instance_type" "selected" {
-  instance_type = var.instance_type
+  instance_type = local.instance_type
 }
 
 locals {
+  # Perfiles de tamaño (docs/costs.md). Una variable definida explícitamente gana sobre el tier.
+  tiers = {
+    minimo   = { instance_type = "t3.medium", xmx_mb = 2048, overhead_mb = 1536, disk_gb = 30 }
+    estandar = { instance_type = "m7i.large", xmx_mb = 4096, overhead_mb = 3072, disk_gb = 30 }
+    robusto  = { instance_type = "r7i.large", xmx_mb = 8192, overhead_mb = 3072, disk_gb = 50 }
+    grande   = { instance_type = "m7i.xlarge", xmx_mb = 10240, overhead_mb = 3072, disk_gb = 60 }
+  }
+  tier             = local.tiers[var.tier]
+  instance_type    = coalesce(var.instance_type, local.tier.instance_type)
+  java_xmx_mb      = coalesce(var.pz_java_xmx_mb, local.tier.xmx_mb)
+  host_overhead_mb = coalesce(var.pz_host_overhead_mb, local.tier.overhead_mb)
+  disk_gb          = coalesce(var.root_volume_size_gb, local.tier.disk_gb)
+
   base_ami_id = var.ami_id != "" ? var.ami_id : data.aws_ami.ubuntu.id
 
   # Origen de la restauración: snapshot explícito > último snapshot con tag > ninguno.
@@ -59,15 +72,15 @@ locals {
   restore_snapshot_id = !var.restore_from_snapshot ? "" : (var.restore_snapshot_id != "" ? var.restore_snapshot_id : local.latest_snapshot_id)
   restoring           = local.restore_snapshot_id != ""
 
-  root_volume_size = local.restoring ? max(30, data.aws_ebs_snapshot.restore[0].volume_size) : 30
+  root_volume_size = local.restoring ? max(local.disk_gb, data.aws_ebs_snapshot.restore[0].volume_size) : local.disk_gb
   instance_ami_id  = local.restoring ? aws_ami.restored[0].id : local.base_ami_id
 
   key_name    = length(aws_key_pair.pz) > 0 ? aws_key_pair.pz[0].key_name : (var.ssh_key_name != "" ? var.ssh_key_name : null)
   ssh_enabled = local.key_name != null && length(var.ssh_allowed_cidrs) > 0
 
-  required_ram_mb = var.pz_java_xmx_mb + var.pz_host_overhead_mb
+  required_ram_mb = local.java_xmx_mb + local.host_overhead_mb
 
-  # Tag que une el disco del mundo con la política DLM de este servidor (y solo de este).
+  # Tag que identifica el disco del mundo de este servidor (lo usan los snapshots automáticos).
   world_volume_tag = "pz-world-volume"
 
   user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
@@ -78,9 +91,12 @@ locals {
     repo_follow_branch   = var.repo_follow_branch
     repo_dir             = "/home/ubuntu/repo"
     server_name          = var.pz_server_name
-    java_xmx_mb          = var.pz_java_xmx_mb
-    host_overhead_mb     = var.pz_host_overhead_mb
+    java_xmx_mb          = local.java_xmx_mb
+    host_overhead_mb     = local.host_overhead_mb
     wait_for_config      = var.pz_wait_for_config
+    auto_backup_enabled  = var.auto_backup_enabled
+    backup_time_utc      = var.backup_time_utc
+    backup_retain_count  = var.backup_retain_count
   })
 }
 
@@ -95,7 +111,7 @@ check "ssh_access_for_operations" {
 check "burstable_cpu" {
   assert {
     condition     = !data.aws_ec2_instance_type.selected.burstable_performance_supported
-    error_message = "${var.instance_type} es de CPU burstable (créditos): bajo carga sostenida se limita o cobra créditos extra. Documentar balance de créditos, modo y costo (ver docs/spec.md) o usar una familia no burstable."
+    error_message = "${local.instance_type} es de CPU burstable (créditos): bajo carga sostenida se limita o cobra créditos extra. Documentar balance de créditos, modo y costo (ver docs/spec.md) o usar una familia no burstable."
   }
 }
 
@@ -182,10 +198,11 @@ resource "aws_security_group" "pz_sg" {
 # Instancia EC2 con script de User Data
 resource "aws_instance" "pz_server" {
   ami                    = local.instance_ami_id
-  instance_type          = var.instance_type
+  instance_type          = local.instance_type
   availability_zone      = var.availability_zone
   vpc_security_group_ids = [aws_security_group.pz_sg.id]
   key_name               = local.key_name
+  iam_instance_profile   = var.auto_backup_enabled ? aws_iam_instance_profile.pz[0].name : null
 
   root_block_device {
     volume_size           = local.root_volume_size
@@ -212,12 +229,12 @@ resource "aws_instance" "pz_server" {
 
     precondition {
       condition     = contains(data.aws_ec2_instance_type.selected.supported_architectures, "x86_64")
-      error_message = "${var.instance_type} no es x86_64; el playbook y pzsvrtool necesitan x86_64."
+      error_message = "${local.instance_type} no es x86_64; el playbook y pzsvrtool necesitan x86_64."
     }
 
     precondition {
       condition     = data.aws_ec2_instance_type.selected.memory_size >= local.required_ram_mb
-      error_message = "${var.instance_type} tiene ${data.aws_ec2_instance_type.selected.memory_size} MiB de RAM y el servidor necesita al menos ${local.required_ram_mb} MiB (pz_java_xmx_mb + pz_host_overhead_mb)."
+      error_message = "${local.instance_type} tiene ${data.aws_ec2_instance_type.selected.memory_size} MiB de RAM y el servidor necesita al menos ${local.required_ram_mb} MiB (heap ${local.java_xmx_mb} + margen ${local.host_overhead_mb}; tier ${var.tier})."
     }
   }
 }
@@ -233,24 +250,25 @@ resource "aws_eip" "pz" {
 }
 
 # -----------------------------------------------------------------------------
-# Snapshots automáticos del disco del mundo (DLM)
+# Snapshots automáticos: los hace la propia instancia (timer diario de systemd), así que
+# solo hay snapshots de los días en que estuvo prendida. Rol con permisos mínimos.
 # -----------------------------------------------------------------------------
-data "aws_iam_policy_document" "dlm_assume" {
+data "aws_iam_policy_document" "ec2_assume" {
   statement {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "Service"
-      identifiers = ["dlm.amazonaws.com"]
+      identifiers = ["ec2.amazonaws.com"]
     }
   }
 }
 
-# Permisos mínimos: snapshot solo de volúmenes con el tag de este servidor, y borrado
-# solo de snapshots automáticos (pz-backup=auto); los manuales quedan fuera de su alcance.
-data "aws_iam_policy_document" "dlm" {
+# Snapshot solo del disco con el tag de este servidor; borrado solo de los snapshots
+# automáticos de este servidor (pz-backup=auto); los manuales quedan fuera de su alcance.
+data "aws_iam_policy_document" "snapshots" {
   statement {
     sid       = "SnapshotWorldVolume"
-    actions   = ["ec2:CreateSnapshot", "ec2:CreateSnapshots"]
+    actions   = ["ec2:CreateSnapshot"]
     resources = ["arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:volume/*"]
     condition {
       test     = "StringEquals"
@@ -261,7 +279,7 @@ data "aws_iam_policy_document" "dlm" {
 
   statement {
     sid       = "CreateSnapshotResource"
-    actions   = ["ec2:CreateSnapshot", "ec2:CreateSnapshots"]
+    actions   = ["ec2:CreateSnapshot"]
     resources = ["arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}::snapshot/*"]
   }
 
@@ -269,10 +287,15 @@ data "aws_iam_policy_document" "dlm" {
     sid       = "TagNewSnapshots"
     actions   = ["ec2:CreateTags"]
     resources = ["arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}::snapshot/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values   = ["CreateSnapshot"]
+    }
   }
 
   statement {
-    sid       = "DeleteOwnSnapshots"
+    sid       = "DeleteOwnAutoSnapshots"
     actions   = ["ec2:DeleteSnapshot"]
     resources = ["arn:${data.aws_partition.current.partition}:ec2:${var.aws_region}::snapshot/*"]
     condition {
@@ -280,64 +303,35 @@ data "aws_iam_policy_document" "dlm" {
       variable = "aws:ResourceTag/pz-backup"
       values   = ["auto"]
     }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/pz-server"
+      values   = [var.pz_server_name]
+    }
   }
 
   statement {
     sid       = "Describe"
-    actions   = ["ec2:DescribeInstances", "ec2:DescribeVolumes", "ec2:DescribeSnapshots"]
+    actions   = ["ec2:DescribeVolumes", "ec2:DescribeSnapshots"]
     resources = ["*"]
   }
 }
 
-resource "aws_iam_role" "dlm" {
-  count              = var.backup_policy_enabled ? 1 : 0
-  name               = "pz-dlm-${var.pz_server_name}"
-  assume_role_policy = data.aws_iam_policy_document.dlm_assume.json
+resource "aws_iam_role" "pz" {
+  count              = var.auto_backup_enabled ? 1 : 0
+  name               = "pz-server-${var.pz_server_name}"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
 }
 
-resource "aws_iam_role_policy" "dlm" {
-  count  = var.backup_policy_enabled ? 1 : 0
-  name   = "pz-dlm-snapshots"
-  role   = aws_iam_role.dlm[0].id
-  policy = data.aws_iam_policy_document.dlm.json
+resource "aws_iam_role_policy" "snapshots" {
+  count  = var.auto_backup_enabled ? 1 : 0
+  name   = "pz-auto-snapshots"
+  role   = aws_iam_role.pz[0].id
+  policy = data.aws_iam_policy_document.snapshots.json
 }
 
-resource "aws_dlm_lifecycle_policy" "world" {
-  count              = var.backup_policy_enabled ? 1 : 0
-  description        = "Snapshots diarios del mundo de PZ ${var.pz_server_name}"
-  execution_role_arn = aws_iam_role.dlm[0].arn
-  state              = "ENABLED"
-
-  policy_details {
-    resource_types = ["VOLUME"]
-    target_tags = {
-      (local.world_volume_tag) = var.pz_server_name
-    }
-
-    schedule {
-      name      = "diario"
-      copy_tags = false
-
-      create_rule {
-        interval      = 24
-        interval_unit = "HOURS"
-        times         = [var.backup_time_utc]
-      }
-
-      retain_rule {
-        count = var.backup_retain_count
-      }
-
-      # Name distinto de pz-world-data-snapshot: la restauración automática solo usa los
-      # snapshots consistentes (tomados con el juego detenido); estos se eligen a mano.
-      tags_to_add = {
-        Name             = "pz-world-data-snapshot-auto"
-        "pz-backup"      = "auto"
-        "pz-consistency" = "crash"
-        "pz-server"      = var.pz_server_name
-      }
-    }
-  }
-
-  depends_on = [aws_iam_role_policy.dlm]
+resource "aws_iam_instance_profile" "pz" {
+  count = var.auto_backup_enabled ? 1 : 0
+  name  = "pz-server-${var.pz_server_name}"
+  role  = aws_iam_role.pz[0].name
 }

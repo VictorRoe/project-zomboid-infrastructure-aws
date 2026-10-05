@@ -631,6 +631,9 @@
       changed_when: false
       when: not (pz_auto_update_enabled | bool)
 
+    - name: Automatic daily snapshots (only while the instance is running)
+      ansible.builtin.import_tasks: tasks/auto_snapshot.yml
+
     # -----------------------------------------------------------------------
     # Firewall last: allow SSH before enabling UFW.
     # -----------------------------------------------------------------------
@@ -697,6 +700,9 @@
           - "Contraseña de admin ({{ pz_admin_name }}): sudo cat {{ pz_admin_password_file }}"
           - "Contraseña de ingreso de los jugadores: sudo cat {{ pz_join_password_file }} (o script/pz-ctl.sh join-password)"
           - "Heap de Java: {{ pz_java_xmx_mb }} MB (ProjectZomboid64.json)"
+          - >-
+            Snapshots automáticos: {{ ('diarios a las ' ~ pz_snapshot_time_utc ~ ' UTC con la instancia prendida, se conservan ' ~ pz_snapshot_retain)
+               if pz_auto_snapshot_enabled | bool else 'desactivados' }}
           - >-
             {{ 'ESPERANDO CONFIGURACIÓN: el juego no arranca hasta correr script/pz-ctl.sh push-config <dir>.'
                if not pz_game_may_start | bool else 'Configuración del servidor: ' ~

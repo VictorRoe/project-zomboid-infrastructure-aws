@@ -5,9 +5,9 @@ PLAYBOOK := playbook/project-zomboid-server-install.yml
 
 BOOTSTRAP_DIR := bootstrap/state-backend
 
-.PHONY: test tf-test bootstrap-test user-data-check provision-test script-test ansible-check ansible-test
+.PHONY: test tf-test bootstrap-test user-data-check provision-test snapshot-test script-test ansible-check ansible-test
 
-test: tf-test bootstrap-test user-data-check provision-test script-test ansible-check ansible-test
+test: tf-test bootstrap-test user-data-check provision-test snapshot-test script-test ansible-check ansible-test
 
 tf-test:
 	$(TF) -chdir=$(TF_DIR) init -backend=false -input=false >/dev/null
@@ -34,6 +34,10 @@ user-data-check:
 provision-test:
 	@if command -v shellcheck >/dev/null; then shellcheck $(TF_DIR)/templates/pz-provision.sh tests/provision/run.sh; fi
 	tests/provision/run.sh
+
+# Snapshot automático de la instancia con IMDS falso y boto3 simulado.
+snapshot-test:
+	python3 -m unittest discover -s tests/snapshot
 
 # Scripts del operador contra stubs de aws/ssh/terraform (tests/script/bin).
 script-test:

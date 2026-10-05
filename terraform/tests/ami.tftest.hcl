@@ -6,11 +6,11 @@ mock_provider "aws" {
     values = { memory_size = 8192, supported_architectures = ["x86_64"], burstable_performance_supported = false }
   }
   override_data {
-    target = data.aws_iam_policy_document.dlm_assume
+    target = data.aws_iam_policy_document.ec2_assume
     values = { json = "{}" }
   }
   override_data {
-    target = data.aws_iam_policy_document.dlm
+    target = data.aws_iam_policy_document.snapshots
     values = { json = "{}" }
   }
   override_data {
@@ -18,8 +18,8 @@ mock_provider "aws" {
     values = { account_id = "123456789012" }
   }
   override_resource {
-    target = aws_iam_role.dlm
-    values = { arn = "arn:aws:iam::123456789012:role/pz-dlm-test" }
+    target = aws_iam_role.pz
+    values = { arn = "arn:aws:iam::123456789012:role/pz-server-test" }
   }
 }
 

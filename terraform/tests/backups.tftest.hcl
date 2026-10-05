@@ -6,11 +6,11 @@ mock_provider "aws" {
     values = { memory_size = 8192, supported_architectures = ["x86_64"], burstable_performance_supported = false }
   }
   override_data {
-    target = data.aws_iam_policy_document.dlm_assume
+    target = data.aws_iam_policy_document.ec2_assume
     values = { json = "{}" }
   }
   override_data {
-    target = data.aws_iam_policy_document.dlm
+    target = data.aws_iam_policy_document.snapshots
     values = { json = "{}" }
   }
   override_data {
@@ -18,10 +18,12 @@ mock_provider "aws" {
     values = { account_id = "123456789012" }
   }
   override_resource {
-    target = aws_iam_role.dlm
-    values = { arn = "arn:aws:iam::123456789012:role/pz-dlm-test" }
+    target = aws_iam_role.pz
+    values = { arn = "arn:aws:iam::123456789012:role/pz-server-test" }
   }
 }
+
+# Commit fijo de prueba (#18): repo_commit es obligatorio fuera del modo rama.
 # Con SSH configurado, para que el aviso de check.ssh_access_for_operations no aparezca.
 variables {
   repo_commit       = "0123456789abcdef0123456789abcdef01234567"
@@ -36,58 +38,55 @@ override_data {
   }
 }
 
-# --- Snapshots automáticos con DLM (#10) ---
+# --- Snapshots automáticos hechos por la instancia, solo con ella prendida (#10) ---
 
-run "daily_policy_by_default" {
+run "enabled_by_default" {
   command = plan
 
   assert {
-    condition     = length(aws_dlm_lifecycle_policy.world) == 1 && aws_dlm_lifecycle_policy.world[0].state == "ENABLED"
-    error_message = "La política diaria tiene que crearse por defecto."
+    condition     = length(aws_iam_instance_profile.pz) == 1 && length(aws_iam_role_policy.snapshots) == 1
+    error_message = "Por defecto la instancia tiene un rol para sus propios snapshots."
   }
 
   assert {
-    condition = (
-      one(aws_dlm_lifecycle_policy.world[0].policy_details).target_tags == tomap({ "pz-world-volume" = "zomboid" })
-      && one(aws_instance.pz_server.root_block_device).tags["pz-world-volume"] == "zomboid"
-    )
-    error_message = "La política tiene que apuntar solo al disco del mundo de este servidor, por tag."
+    condition     = one(aws_instance.pz_server.root_block_device).tags["pz-world-volume"] == "zomboid"
+    error_message = "El disco del mundo tiene que llevar el tag que limita los permisos."
   }
 
   assert {
-    condition = (
-      one(one(one(aws_dlm_lifecycle_policy.world[0].policy_details).schedule).create_rule).times == tolist(["09:00"])
-      && one(one(one(aws_dlm_lifecycle_policy.world[0].policy_details).schedule).retain_rule).count == 7
-    )
-    error_message = "Por defecto: un snapshot diario a las 09:00 UTC y 7 copias."
-  }
-
-  assert {
-    condition = (
-      one(one(aws_dlm_lifecycle_policy.world[0].policy_details).schedule).tags_to_add["Name"] == "pz-world-data-snapshot-auto"
-      && one(one(aws_dlm_lifecycle_policy.world[0].policy_details).schedule).tags_to_add["pz-consistency"] == "crash"
-    )
-    error_message = "Los automáticos no se declaran consistentes ni los elige la restauración automática."
+    condition = alltrue([
+      strcontains(aws_instance.pz_server.user_data, "PZ_AUTO_SNAPSHOT_ENABLED=true"),
+      strcontains(aws_instance.pz_server.user_data, "PZ_SNAPSHOT_TIME_UTC=09:00"),
+      strcontains(aws_instance.pz_server.user_data, "PZ_SNAPSHOT_RETAIN=4"),
+    ])
+    error_message = "Por defecto: diario a las 09:00 UTC, se conservan 4."
   }
 }
 
-run "dlm_permissions_are_scoped" {
+run "permissions_are_scoped" {
   command = plan
 
   assert {
     condition = anytrue([
-      for st in data.aws_iam_policy_document.dlm.statement :
-      contains(st.actions, "ec2:DeleteSnapshot") && anytrue([for c in st.condition : c.variable == "aws:ResourceTag/pz-backup" && contains(c.values, "auto")])
+      for st in data.aws_iam_policy_document.snapshots.statement :
+      contains(st.actions, "ec2:DeleteSnapshot")
+      && anytrue([for c in st.condition : c.variable == "aws:ResourceTag/pz-backup" && contains(c.values, "auto")])
+      && anytrue([for c in st.condition : c.variable == "aws:ResourceTag/pz-server" && contains(c.values, "zomboid")])
     ])
-    error_message = "DLM solo puede borrar snapshots automáticos (pz-backup=auto), nunca los manuales."
+    error_message = "La instancia solo puede borrar sus snapshots automáticos, nunca los manuales ni los de otro servidor."
   }
 
   assert {
     condition = anytrue([
-      for st in data.aws_iam_policy_document.dlm.statement :
+      for st in data.aws_iam_policy_document.snapshots.statement :
       contains(st.actions, "ec2:CreateSnapshot") && anytrue([for c in st.condition : c.variable == "aws:ResourceTag/pz-world-volume" && contains(c.values, "zomboid")])
     ])
-    error_message = "DLM solo puede hacer snapshot de volúmenes de este servidor."
+    error_message = "La instancia solo puede hacer snapshot de su disco del mundo."
+  }
+
+  assert {
+    condition     = !anytrue([for st in data.aws_iam_policy_document.snapshots.statement : contains(st.actions, "ec2:*") || contains(st.actions, "*")])
+    error_message = "Sin comodines de acciones."
   }
 }
 
@@ -96,17 +95,12 @@ run "custom_schedule" {
 
   variables {
     backup_time_utc     = "05:30"
-    backup_retain_count = 14
-    pz_server_name      = "w2"
+    backup_retain_count = 7
   }
 
   assert {
-    condition = (
-      one(one(one(aws_dlm_lifecycle_policy.world[0].policy_details).schedule).create_rule).times == tolist(["05:30"])
-      && one(one(one(aws_dlm_lifecycle_policy.world[0].policy_details).schedule).retain_rule).count == 14
-      && one(aws_dlm_lifecycle_policy.world[0].policy_details).target_tags == tomap({ "pz-world-volume" = "w2" })
-    )
-    error_message = "Hora, retención y servidor tienen que ser configurables."
+    condition     = strcontains(aws_instance.pz_server.user_data, "PZ_SNAPSHOT_TIME_UTC=05:30") && strcontains(aws_instance.pz_server.user_data, "PZ_SNAPSHOT_RETAIN=7")
+    error_message = "Hora y retención tienen que ser configurables."
   }
 }
 
@@ -114,12 +108,17 @@ run "disabled" {
   command = plan
 
   variables {
-    backup_policy_enabled = false
+    auto_backup_enabled = false
   }
 
   assert {
-    condition     = length(aws_dlm_lifecycle_policy.world) == 0 && length(aws_iam_role.dlm) == 0 && output.backup_policy_id == ""
-    error_message = "backup_policy_enabled = false no crea política ni rol."
+    condition     = length(aws_iam_role.pz) == 0 && length(aws_iam_instance_profile.pz) == 0 && strcontains(aws_instance.pz_server.user_data, "PZ_AUTO_SNAPSHOT_ENABLED=false")
+    error_message = "auto_backup_enabled = false no crea rol ni perfil y desactiva el timer."
+  }
+
+  assert {
+    condition     = output.auto_backup == "desactivado"
+    error_message = "El output tiene que informar que no hay snapshots automáticos."
   }
 }
 

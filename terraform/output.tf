@@ -38,7 +38,18 @@ output "ssh_enabled" {
   description = "true si hay key pair y redes administrativas para SSH"
 }
 
-output "backup_policy_id" {
-  value       = var.backup_policy_enabled ? aws_dlm_lifecycle_policy.world[0].id : ""
-  description = "Política DLM de snapshots automáticos (vacío = desactivada)"
+output "tier" {
+  value = {
+    tier             = var.tier
+    instance_type    = local.instance_type
+    java_xmx_mb      = local.java_xmx_mb
+    host_overhead_mb = local.host_overhead_mb
+    disk_gb          = local.root_volume_size
+  }
+  description = "Perfil de tamaño efectivo (tier más las variables que lo reemplazan)"
+}
+
+output "auto_backup" {
+  value       = var.auto_backup_enabled ? "diario a las ${var.backup_time_utc} UTC con la instancia prendida; se conservan ${var.backup_retain_count}" : "desactivado"
+  description = "Snapshots automáticos"
 }

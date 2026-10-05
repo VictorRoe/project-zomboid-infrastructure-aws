@@ -89,6 +89,9 @@ as_user "$ANSIBLE_PLAYBOOK" -i inventory.ini project-zomboid-server-install.yml 
   -e "pz_java_xmx_mb=$PZ_JAVA_XMX_MB" \
   -e "pz_host_overhead_mb=$PZ_HOST_OVERHEAD_MB" \
   -e "pz_wait_for_config=$PZ_WAIT_FOR_CONFIG" \
+  -e "pz_auto_snapshot_enabled=${PZ_AUTO_SNAPSHOT_ENABLED:-false}" \
+  -e "pz_snapshot_time_utc=${PZ_SNAPSHOT_TIME_UTC:-09:00}" \
+  -e "pz_snapshot_retain=${PZ_SNAPSHOT_RETAIN:-4}" \
   ${extra_args[@]+"${extra_args[@]}"}
 
 if [ -n "$new_commit" ]; then

@@ -64,6 +64,15 @@ pz_backup_limit: 10
 pz_discord_webhook: ""
 
 # -------------------------------------------------------------------------
+# Snapshots automáticos del disco (los hace la instancia; Terraform pasa los valores)
+# -------------------------------------------------------------------------
+pz_auto_snapshot_enabled: false
+pz_snapshot_time_utc: "09:00"
+pz_snapshot_retain: 4
+# Evita un segundo snapshot si el timer corre al prender poco después del último.
+pz_snapshot_min_hours: 12
+
+# -------------------------------------------------------------------------
 # Firewall
 # -------------------------------------------------------------------------
 pz_manage_ufw: true

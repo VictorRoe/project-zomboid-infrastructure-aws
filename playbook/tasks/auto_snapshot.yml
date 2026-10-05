@@ -1,0 +1,87 @@
+---
+# Snapshot automático diario hecho por la propia instancia (files/pz-auto-snapshot.py).
+# Un timer de systemd solo corre con la EC2 prendida: no hay snapshots de días apagada.
+# Persistent=true: si a la hora programada estaba apagada, corre al volver a prenderla.
+- name: Install automatic snapshot dependencies
+  ansible.builtin.apt:
+    name: python3-boto3
+    state: present
+  when: pz_auto_snapshot_enabled | bool
+
+- name: Install automatic snapshot script
+  ansible.builtin.copy:
+    src: "{{ pz_files_dir }}/pz-auto-snapshot.py"
+    dest: /usr/local/sbin/pz-auto-snapshot
+    owner: root
+    group: root
+    mode: "0755"
+  when: pz_auto_snapshot_enabled | bool
+
+- name: Configure automatic snapshots
+  ansible.builtin.copy:
+    dest: /etc/pz-auto-snapshot.env
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      PZ_SERVER_NAME={{ pz_server_name }}
+      PZ_SNAPSHOT_RETAIN={{ pz_snapshot_retain | int }}
+      PZ_SNAPSHOT_MIN_HOURS={{ pz_snapshot_min_hours | int }}
+  when: pz_auto_snapshot_enabled | bool
+
+- name: Install automatic snapshot service and timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop:
+    - name: pz-auto-snapshot.service
+      content: |
+        [Unit]
+        Description=Snapshot automático del disco del mundo de Project Zomboid
+        Wants=network-online.target
+        After=network-online.target
+
+        [Service]
+        Type=oneshot
+        EnvironmentFile=/etc/pz-auto-snapshot.env
+        ExecStart=/usr/bin/python3 /usr/local/sbin/pz-auto-snapshot
+    - name: pz-auto-snapshot.timer
+      content: |
+        [Unit]
+        Description=Snapshot diario del mundo (solo con la instancia prendida)
+
+        [Timer]
+        OnCalendar=*-*-* {{ pz_snapshot_time_utc }}:00 UTC
+        Persistent=true
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  when: pz_auto_snapshot_enabled | bool
+
+- name: Enable automatic snapshot timer
+  ansible.builtin.systemd_service:
+    name: pz-auto-snapshot.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: pz_auto_snapshot_enabled | bool
+
+- name: Check for an existing automatic snapshot timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/pz-auto-snapshot.timer
+  register: pz_snapshot_timer_stat
+  when: not pz_auto_snapshot_enabled | bool
+
+- name: Disable automatic snapshot timer when not requested
+  ansible.builtin.systemd_service:
+    name: pz-auto-snapshot.timer
+    enabled: false
+    state: stopped
+  when:
+    - not pz_auto_snapshot_enabled | bool
+    - pz_snapshot_timer_stat.stat.exists | default(false)

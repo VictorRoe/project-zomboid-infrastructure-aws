@@ -260,6 +260,8 @@ cmd_check() {
   expect "el .ini tiene la contraseña de ingreso antes de admitir jugadores" vm_ssh "sudo grep -qxF \"Password=\$(sudo cat /home/pzserver/pzsvrtool/.join_password)\" $ini"
   expect "heap fijado en ProjectZomboid64.json" vm_ssh 'sudo grep -q "\"-Xmx4096m\"" /home/pzserver/pzserver/ProjectZomboid64.json'
   expect "UFW activo con 16261/udp" vm_ssh 'sudo ufw status | grep -q "16261/udp.*ALLOW"'
+  expect "timer de snapshots diarios activo y persistente" vm_ssh 'systemctl is-active --quiet pz-auto-snapshot.timer && grep -qx "Persistent=true" /etc/systemd/system/pz-auto-snapshot.timer && grep -qx "PZ_SNAPSHOT_RETAIN=4" /etc/pz-auto-snapshot.env'
+  expect "el snapshot automático no hace nada fuera de EC2" vm_ssh 'sudo systemctl start pz-auto-snapshot.service && sudo journalctl -u pz-auto-snapshot.service -n 5 | grep -q "no es una instancia de AWS"'
   if vm_ssh 'sudo test -f /home/pzserver/pzsvrtool/config-applied.json || sudo test -d /home/pzserver/Zomboid/Saves/Multiplayer/'"$PZ_SERVER_NAME"; then
     expect "servicio activo" svc "is-active --quiet pzsvrtool@$PZ_SERVER_NAME.service"
     expect "proceso ProjectZomboid corriendo" wait_game

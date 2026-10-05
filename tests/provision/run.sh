@@ -51,6 +51,9 @@ PZ_SERVER_NAME=world1
 PZ_JAVA_XMX_MB=4096
 PZ_HOST_OVERHEAD_MB=3072
 PZ_WAIT_FOR_CONFIG=true
+PZ_AUTO_SNAPSHOT_ENABLED=true
+PZ_SNAPSHOT_TIME_UTC=09:00
+PZ_SNAPSHOT_RETAIN=4
 ENV
   STUB_LOG="$WORK/calls.log"; : > "$STUB_LOG"; rm -f "$WORK/state"
   OUT="$(env PATH="$WORK/bin:$PATH" STUB_LOG="$STUB_LOG" RUN_AS="$(id -un)" PZ_PROVISION_ENV="$ENV_FILE" \
@@ -75,7 +78,7 @@ run_case "commit fijo (no la punta de main)" "$A" false
 check "sale con 0" '[ "$RC" -eq 0 ]'
 check "HEAD es el commit pedido" 'head_is "$A"'
 check "el playbook corre sobre esa revisión" 'grep -q "version=a" "$STUB_LOG"'
-check "pasa las variables de Terraform" 'grep -q "pz_server_name=world1" "$STUB_LOG" && grep -q "pz_java_xmx_mb=4096" "$STUB_LOG" && grep -q "pz_wait_for_config=true" "$STUB_LOG"'
+check "pasa las variables de Terraform" 'grep -q "pz_server_name=world1" "$STUB_LOG" && grep -q "pz_java_xmx_mb=4096" "$STUB_LOG" && grep -q "pz_wait_for_config=true" "$STUB_LOG" && grep -q "pz_snapshot_retain=4" "$STUB_LOG" && grep -q "pz_auto_snapshot_enabled=true" "$STUB_LOG"'
 check "registra la revisión aplicada" 'grep -qx "commit=$A" "$WORK/state" && grep -qx "mode=pinned" "$WORK/state"'
 
 run_case "commit inexistente" 0000000000000000000000000000000000000000 false

@@ -15,31 +15,53 @@ variable "availability_zone" {
   }
 }
 
+variable "tier" {
+  type        = string
+  default     = "estandar"
+  description = "Perfil de tamaño: minimo, estandar, robusto o grande (ver docs/costs.md). Las variables individuales lo reemplazan"
+
+  validation {
+    condition     = contains(["minimo", "estandar", "robusto", "grande"], var.tier)
+    error_message = "tier tiene que ser minimo, estandar, robusto o grande."
+  }
+}
+
 variable "instance_type" {
   type        = string
-  default     = "m7i.large"
-  description = "Tipo de instancia EC2 (x86_64, 2 vCPU/8 GiB no burstable por defecto). Tiene que tener al menos pz_java_xmx_mb + pz_host_overhead_mb de RAM"
+  default     = null
+  description = "Tipo de instancia EC2 (x86_64); null = el del tier. Tiene que tener al menos heap + margen de RAM"
 }
 
 variable "pz_java_xmx_mb" {
   type        = number
-  default     = 4096
-  description = "Heap máximo de Java del servidor (-Xmx, en MiB); Ansible lo escribe en ProjectZomboid64.json. Subirlo (y la instancia) para servidores con muchos mods"
+  default     = null
+  description = "Heap máximo de Java del servidor (-Xmx, MiB) que Ansible escribe en ProjectZomboid64.json; null = el del tier"
 
   validation {
-    condition     = var.pz_java_xmx_mb >= 1024 && floor(var.pz_java_xmx_mb) == var.pz_java_xmx_mb
+    condition     = var.pz_java_xmx_mb == null || try(var.pz_java_xmx_mb >= 1024 && floor(var.pz_java_xmx_mb) == var.pz_java_xmx_mb, false)
     error_message = "pz_java_xmx_mb tiene que ser un entero >= 1024."
   }
 }
 
 variable "pz_host_overhead_mb" {
   type        = number
-  default     = 3072
-  description = "RAM (MiB) que se reserva además del heap: SO, memoria nativa de Java, pzsvrtool. La swap no cuenta"
+  default     = null
+  description = "RAM (MiB) reservada además del heap: SO, memoria nativa de Java, pzsvrtool (la swap no cuenta); null = el del tier"
 
   validation {
-    condition     = var.pz_host_overhead_mb >= 1024 && floor(var.pz_host_overhead_mb) == var.pz_host_overhead_mb
+    condition     = var.pz_host_overhead_mb == null || try(var.pz_host_overhead_mb >= 1024 && floor(var.pz_host_overhead_mb) == var.pz_host_overhead_mb, false)
     error_message = "pz_host_overhead_mb tiene que ser un entero >= 1024."
+  }
+}
+
+variable "root_volume_size_gb" {
+  type        = number
+  default     = null
+  description = "Tamaño del disco gp3 (GB) con SO, juego, mods y mundo; null = el del tier. Al restaurar se usa al menos el tamaño del snapshot"
+
+  validation {
+    condition     = var.root_volume_size_gb == null || try(var.root_volume_size_gb >= 20 && floor(var.root_volume_size_gb) == var.root_volume_size_gb, false)
+    error_message = "root_volume_size_gb tiene que ser un entero >= 20."
   }
 }
 
@@ -159,16 +181,16 @@ variable "repo_follow_branch" {
   description = "Modo de prueba explícito: seguir la punta mutable de repo_branch en lugar de un commit fijo"
 }
 
-variable "backup_policy_enabled" {
+variable "auto_backup_enabled" {
   type        = bool
   default     = true
-  description = "Crear la política DLM de snapshots automáticos del disco del mundo"
+  description = "Snapshot automático diario hecho por la propia instancia (solo los días que está prendida), con rotación"
 }
 
 variable "backup_time_utc" {
   type        = string
   default     = "09:00"
-  description = "Hora UTC (HH:MM) del snapshot diario; DLM lo inicia dentro de la hora siguiente"
+  description = "Hora UTC (HH:MM) del snapshot diario; si la instancia estaba apagada, se hace al volver a prenderla"
 
   validation {
     condition     = can(regex("^([01][0-9]|2[0-3]):[0-5][0-9]$", var.backup_time_utc))
@@ -178,11 +200,11 @@ variable "backup_time_utc" {
 
 variable "backup_retain_count" {
   type        = number
-  default     = 7
-  description = "Cantidad de snapshots diarios automáticos que conserva DLM"
+  default     = 4
+  description = "Cantidad de snapshots automáticos que se conservan (se borra el más viejo); los manuales no se tocan"
 
   validation {
-    condition     = var.backup_retain_count >= 1 && var.backup_retain_count <= 1000 && floor(var.backup_retain_count) == var.backup_retain_count
-    error_message = "backup_retain_count tiene que ser un entero entre 1 y 1000."
+    condition     = var.backup_retain_count >= 1 && var.backup_retain_count <= 100 && floor(var.backup_retain_count) == var.backup_retain_count
+    error_message = "backup_retain_count tiene que ser un entero entre 1 y 100."
   }
 }
