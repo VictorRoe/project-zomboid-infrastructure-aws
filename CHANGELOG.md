@@ -26,7 +26,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - **Migración:** `repo_commit` es obligatorio (SHA de `main` mergeado y probado). Cambiarlo no reinicia la instancia; se aplica con `script/pz-ctl.sh provision`.
 - **Migración:** estado remoto en S3 con bloqueo nativo (`terraform/backend.tf`, Terraform ≥ 1.11). Crear el bucket con `bootstrap/state-backend` y migrar con `terraform init -backend-config=backend.hcl -migrate-state` ([#16](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/16)).
 - **Migración:** sin `ssh_allowed_cidrs` no hay SSH; declarar las redes administrativas.
-- Tier por defecto `estandar`: `m7i.large` (no burstable) con heap de 4096 MB gestionado por Ansible; Terraform y Ansible rechazan un host sin RAM para heap + margen ([#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)).
+- Tier por defecto `estandar`: `m7i.large` (no burstable) con heap de 5632 MB (margen de 1536) gestionado por Ansible; Terraform y Ansible rechazan un host sin RAM para heap + margen ([#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7)).
 - `public_ip` es una Elastic IP estable; las sesiones usan `pz-ctl.sh stop/start` y `destroy-and-backup.sh` queda para la baja definitiva. La IP cambia una vez al migrar ([#9](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/9)).
 - Con `pz_wait_for_config` (por defecto en Terraform), un servidor nuevo no arranca el juego hasta `pz-ctl.sh push-config`; un disco con mundo existente arranca igual.
 - Los snapshots manuales llevan los tags `pz-server`, `pz-backup` y `pz-consistency`.

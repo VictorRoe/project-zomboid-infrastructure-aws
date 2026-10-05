@@ -54,10 +54,12 @@ data "aws_ec2_instance_type" "selected" {
 locals {
   # Perfiles de tamaño (docs/costs.md). Una variable definida explícitamente gana sobre el tier.
   tiers = {
-    minimo   = { instance_type = "t3.medium", xmx_mb = 2048, overhead_mb = 1536, disk_gb = 30 }
-    estandar = { instance_type = "m7i.large", xmx_mb = 4096, overhead_mb = 3072, disk_gb = 30 }
-    robusto  = { instance_type = "r7i.large", xmx_mb = 8192, overhead_mb = 3072, disk_gb = 50 }
-    grande   = { instance_type = "m7i.xlarge", xmx_mb = 10240, overhead_mb = 3072, disk_gb = 60 }
+    # Margen creciente con el tier (D40): más mods y CPU usan más memoria fuera del heap.
+    # heap + margen entra en la RAM que informa el kernel (algo menos que la nominal).
+    minimo   = { instance_type = "t3.medium", xmx_mb = 2560, overhead_mb = 1024, disk_gb = 30 }
+    estandar = { instance_type = "m7i.large", xmx_mb = 5632, overhead_mb = 1536, disk_gb = 30 }
+    robusto  = { instance_type = "r7i.large", xmx_mb = 13312, overhead_mb = 2048, disk_gb = 50 }
+    grande   = { instance_type = "m7i.xlarge", xmx_mb = 12800, overhead_mb = 2560, disk_gb = 60 }
   }
   tier             = local.tiers[var.tier]
   instance_type    = coalesce(var.instance_type, local.tier.instance_type)

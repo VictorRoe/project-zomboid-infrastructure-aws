@@ -50,8 +50,8 @@ pz_join_password_rotate: false
 # Heap máximo de Java (-Xmx, MiB) que se escribe en ProjectZomboid64.json (también tras
 # cada actualización). Terraform pasa su valor. La RAM mínima utilizable del host es
 # heap + margen (SO, memoria nativa de Java, pzsvrtool); la swap no cuenta.
-pz_java_xmx_mb: 4096
-pz_host_overhead_mb: 3072
+pz_java_xmx_mb: 5632
+pz_host_overhead_mb: 1536
 
 # Swap de emergencia: no reemplaza RAM.
 pz_swap_file: /swapfile

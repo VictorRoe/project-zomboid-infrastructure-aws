@@ -26,10 +26,10 @@ IAM, el security group y el bucket del estado (unos KB) no tienen costo relevant
 
 | Tier | Para qué | Instancia | vCPU | RAM | Heap / margen (MB) | Disco | USD/mes, 60 h de juego | USD/mes, 24/7 |
 |---|---|---|---|---|---|---|---|---|
-| `minimo` | Probar o levantar el server; 1–2 jugadores sin mods | `t3.medium` (burstable) | 2 | 4 GiB | 2048 / 1536 | 30 GB | ~9,05 | ~37 |
-| `estandar` (por defecto) | Grupo chico, pocos mods | `m7i.large` | 2 | 8 GiB | 4096 / 3072 | 30 GB | ~12,70 | ~80 |
-| `robusto` | Muchos mods (~250), 4–8 jugadores | `r7i.large` | 2 | 16 GiB | 8192 / 3072 | 50 GB | ~16,85 | ~105 |
-| `grande` | Muchos mods, más jugadores y CPU | `m7i.xlarge` | 4 | 16 GiB | 10240 / 3072 | 60 GB | ~22,05 | ~157 |
+| `minimo` | Probar o levantar el server; 1–2 jugadores sin mods | `t3.medium` (burstable) | 2 | 4 GiB | 2560 / 1024 | 30 GB | ~9,05 | ~37 |
+| `estandar` (por defecto) | Grupo chico, pocos mods | `m7i.large` | 2 | 8 GiB | 5632 / 1536 | 30 GB | ~12,70 | ~80 |
+| `robusto` | Muchos mods (~250), 4–8 jugadores | `r7i.large` | 2 | 16 GiB | 13312 / 2048 | 50 GB | ~16,85 | ~105 |
+| `grande` | Muchos mods, más jugadores y CPU | `m7i.xlarge` | 4 | 16 GiB | 12800 / 2560 | 60 GB | ~22,05 | ~157 |
 
 Cómo se calcula, en us-east-1: EC2 (horas × precio), más disco gp3, Elastic IP (3,65) y snapshots, que se cobran todo el mes. Se estiman unos 10, 12, 25 y 30 GB guardados en snapshots: son incrementales, así que los 4 ocupan poco más que uno. Por ejemplo, `estandar` con 60 h: EC2 6,05 + gp3 2,40 + EIP 3,65 + snapshots ~0,60 = ~12,70. La transferencia de un grupo chico entra en los 100 GB/mes sin cargo.
 
@@ -40,7 +40,7 @@ Cómo se calcula, en us-east-1: EC2 (horas × precio), más disco gp3, Elastic I
 
 ## Dimensionamiento ([#7](https://github.com/VictorRoe/project-zomboid-infrastructure-aws/issues/7))
 
-- **Regla:** RAM utilizable ≥ heap + margen. El margen cubre SO, memoria nativa de Java (metaspace, hilos, ZGC) y pzsvrtool. La swap no cuenta. Terraform lo verifica con la RAM nominal del tipo de instancia, y Ansible con la RAM que informa el kernel.
+- **Regla:** RAM utilizable ≥ heap + margen. El margen cubre SO, memoria nativa de Java (metaspace, hilos, ZGC) y pzsvrtool. Crece con el tier (1 → 2,5 GB), porque más mods y más CPU usan más memoria fuera del heap. Los tiers dejan heap + margen apenas por debajo de la RAM que informa el kernel (D40): si `metrics` muestra uso sostenido de swap o el proceso muere por falta de memoria, subir `pz_host_overhead_mb` o bajar el heap. La swap no cuenta. Terraform lo verifica con la RAM nominal del tipo de instancia, y Ansible con la RAM que informa el kernel.
 - **Familia no burstable** desde `estandar`: el juego tiene carga sostenida, y con una `t3` se agotan los créditos de CPU (o se pagan, en modo unlimited). Si se usa una burstable, Terraform avisa en el plan. Hay que registrar el balance de créditos (métrica `CPUCreditBalance`), el modo (`standard`/`unlimited`) y el costo bajo carga.
 - El tamaño definitivo de un servidor concreto sale de una prueba de carga, no de esta tabla.
 

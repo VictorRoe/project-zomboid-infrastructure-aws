@@ -7,7 +7,7 @@ Estado objetivo actual del stack. Actualizar este archivo con cada cambio y regi
 | Ítem | Valor |
 |---|---|
 | Región / AZ | `aws_region` = `us-east-1` (se conserva; comparación con `sa-east-1` en [costs.md](costs.md#región-11)); `availability_zone` = `null` (AWS elige; una AZ explícita tiene que pertenecer a la región) |
-| Tier | `tier` = `estandar`. Perfiles (instancia / heap / margen / disco): `minimo` `t3.medium` 2048/1536/30 GB; `estandar` `m7i.large` 4096/3072/30 GB; `robusto` `r7i.large` 8192/3072/50 GB; `grande` `m7i.xlarge` 10240/3072/60 GB. `instance_type`, `pz_java_xmx_mb`, `pz_host_overhead_mb` y `root_volume_size_gb` (null por defecto) los reemplazan. Output `tier` con los valores efectivos |
+| Tier | `tier` = `estandar`. Perfiles (instancia / heap / margen / disco): `minimo` `t3.medium` 2560/1024/30 GB; `estandar` `m7i.large` 5632/1536/30 GB; `robusto` `r7i.large` 13312/2048/50 GB; `grande` `m7i.xlarge` 12800/2560/60 GB. `instance_type`, `pz_java_xmx_mb`, `pz_host_overhead_mb` y `root_volume_size_gb` (null por defecto) los reemplazan. Output `tier` con los valores efectivos |
 | Instancia | La del tier (x86_64), tag `Name=PZ-Server-Instance`, perfil de IAM `pz-server-<nombre>` si hay snapshots automáticos. Precondiciones: arquitectura x86_64 y RAM nominal ≥ `pz_java_xmx_mb` + `pz_host_overhead_mb`. Aviso de plan (`check.burstable_cpu`) si es burstable |
 | Heap | El del tier, salvo `pz_java_xmx_mb`/`pz_host_overhead_mb` (se pasan al playbook) |
 | Imagen | Última Ubuntu Server 24.04 LTS amd64 (gp3) de Canonical en la región, o `ami_id`. `ignore_changes = [ami, user_data]` |

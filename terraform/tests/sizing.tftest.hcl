@@ -49,11 +49,11 @@ run "default_tier_is_estandar" {
       && one(aws_instance.pz_server.root_block_device).volume_size == 30
       && output.tier.tier == "estandar"
     )
-    error_message = "Por defecto: tier estandar (m7i.large, heap 4096 + 3072, 30 GB)."
+    error_message = "Por defecto: tier estandar (m7i.large, heap 5632 + 1536, 30 GB)."
   }
 
   assert {
-    condition     = strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=4096") && strcontains(aws_instance.pz_server.user_data, "PZ_HOST_OVERHEAD_MB=3072")
+    condition     = strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=5632") && strcontains(aws_instance.pz_server.user_data, "PZ_HOST_OVERHEAD_MB=1536")
     error_message = "El heap y el margen del tier tienen que llegar al playbook."
   }
 }
@@ -71,8 +71,8 @@ run "tier_minimo" {
   }
 
   assert {
-    condition     = aws_instance.pz_server.instance_type == "t3.medium" && strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=2048") && local.required_ram_mb == 3584
-    error_message = "minimo: t3.medium con heap 2048 + 1536."
+    condition     = aws_instance.pz_server.instance_type == "t3.medium" && strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=2560") && local.required_ram_mb == 3584
+    error_message = "minimo: t3.medium con heap 2560 + 1024."
   }
 
   # Burstable: el aviso es lo esperado en este tier.
@@ -92,8 +92,8 @@ run "tier_robusto" {
   }
 
   assert {
-    condition     = aws_instance.pz_server.instance_type == "r7i.large" && strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=8192") && one(aws_instance.pz_server.root_block_device).volume_size == 50
-    error_message = "robusto: r7i.large, heap 8192, 50 GB."
+    condition     = aws_instance.pz_server.instance_type == "r7i.large" && strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=13312") && local.required_ram_mb == 15360 && one(aws_instance.pz_server.root_block_device).volume_size == 50
+    error_message = "robusto: r7i.large, heap 13312 + 2048, 50 GB."
   }
 }
 
@@ -110,8 +110,8 @@ run "tier_grande" {
   }
 
   assert {
-    condition     = aws_instance.pz_server.instance_type == "m7i.xlarge" && strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=10240") && one(aws_instance.pz_server.root_block_device).volume_size == 60
-    error_message = "grande: m7i.xlarge, heap 10240, 60 GB."
+    condition     = aws_instance.pz_server.instance_type == "m7i.xlarge" && strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=12800") && local.required_ram_mb == 15360 && one(aws_instance.pz_server.root_block_device).volume_size == 60
+    error_message = "grande: m7i.xlarge, heap 12800 + 2560, 60 GB."
   }
 }
 
@@ -133,7 +133,7 @@ run "explicit_variables_override_tier" {
     condition = (
       aws_instance.pz_server.instance_type == "m7i.xlarge"
       && one(aws_instance.pz_server.root_block_device).volume_size == 80
-      && strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=8192")
+      && strcontains(aws_instance.pz_server.user_data, "PZ_JAVA_XMX_MB=13312")
     )
     error_message = "Una variable explícita gana sobre el tier; el resto sale del tier."
   }

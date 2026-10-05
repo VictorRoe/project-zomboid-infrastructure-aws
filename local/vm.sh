@@ -258,7 +258,7 @@ cmd_check() {
   expect "config de pzsvrtool usa esa contraseña" vm_ssh 'sudo grep -qxF "pzRootAdminPassword=$(sudo cat /home/pzserver/pzsvrtool/.admin_password)" /home/pzserver/pzsvrtool/pzsvrtool.config'
   expect "contraseña de ingreso 0600, 24 caracteres, distinta de la de admin" vm_ssh 'J=/home/pzserver/pzsvrtool/.join_password; [ "$(sudo stat -c "%a %U" $J)" = "600 pzserver" ] && [ "$(sudo cat $J | wc -c)" -eq 24 ] && ! sudo cmp -s $J /home/pzserver/pzsvrtool/.admin_password'
   expect "el .ini tiene la contraseña de ingreso antes de admitir jugadores" vm_ssh "sudo grep -qxF \"Password=\$(sudo cat /home/pzserver/pzsvrtool/.join_password)\" $ini"
-  expect "heap fijado en ProjectZomboid64.json" vm_ssh 'sudo grep -q "\"-Xmx4096m\"" /home/pzserver/pzserver/ProjectZomboid64.json'
+  expect "heap fijado en ProjectZomboid64.json" vm_ssh 'sudo grep -q "\"-Xmx5632m\"" /home/pzserver/pzserver/ProjectZomboid64.json'
   expect "UFW activo con 16261/udp" vm_ssh 'sudo ufw status | grep -q "16261/udp.*ALLOW"'
   expect "timer de snapshots diarios activo y persistente" vm_ssh 'systemctl is-active --quiet pz-auto-snapshot.timer && grep -qx "Persistent=true" /etc/systemd/system/pz-auto-snapshot.timer && grep -qx "PZ_SNAPSHOT_RETAIN=4" /etc/pz-auto-snapshot.env'
   expect "el snapshot automático no hace nada fuera de EC2" vm_ssh 'sudo systemctl start pz-auto-snapshot.service && sudo journalctl -u pz-auto-snapshot.service -n 5 | grep -q "no es una instancia de AWS"'

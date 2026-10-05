@@ -94,8 +94,8 @@ JSON="$H/pzserver/ProjectZomboid64.json"
 gs_case "sin configuración subida" "$H"
 JOIN="$(cat "$H/pzsvrtool/.join_password" 2>/dev/null)"
 check "pasa" '[ "$RC" -eq 0 ]'
-check "heap fijado en ProjectZomboid64.json" 'grep -q "\"-Xmx4096m\"" "$JSON" && ! grep -q "Xmx4g" "$JSON"'
-check "un -Xms mayor que el heap se baja (la JVM no arrancaría)" 'grep -q "\"-Xms4096m\"" "$JSON" && ! grep -q Xms6g "$JSON"'
+check "heap fijado en ProjectZomboid64.json" 'grep -q "\"-Xmx5632m\"" "$JSON" && ! grep -q "Xmx4g" "$JSON"'
+check "un -Xms mayor que el heap se baja (la JVM no arrancaría)" 'grep -q "\"-Xms5632m\"" "$JSON" && ! grep -q Xms6g "$JSON"'
 check "el resto de vmArgs no cambia" 'grep -q "java.awt.headless" "$JSON"'
 check "contraseña de ingreso aleatoria de 24 caracteres" '[[ "$JOIN" =~ ^[A-Za-z0-9]{24}$ ]]'
 check "archivo 0600" '[ "$(mode_of "$H/pzsvrtool/.join_password")" = 600 ]'
@@ -109,9 +109,9 @@ check "pasa sin cambios" '[ "$RC" -eq 0 ] && [ "$(changed_count)" = 0 ]'
 check "no detendría el juego" 'grep -q "needs_stop=False" <<<"$OUT"'
 check "conserva la contraseña" '[ "$(cat "$H/pzsvrtool/.join_password")" = "$JOIN" ]'
 
-gs_case "heap distinto" "$H" -e pz_java_xmx_mb=8192
-check "lo cambia y pide detener el juego" '[ "$RC" -eq 0 ] && grep -q "\"-Xmx8192m\"" "$JSON" && grep -q "needs_stop=True" <<<"$OUT"'
-check "un -Xms menor que el heap no cambia" 'grep -q "\"-Xms4096m\"" "$JSON"'
+gs_case "heap distinto" "$H" -e pz_java_xmx_mb=4096
+check "lo cambia y pide detener el juego" '[ "$RC" -eq 0 ] && grep -q "\"-Xmx4096m\"" "$JSON" && grep -q "needs_stop=True" <<<"$OUT"'
+check "un -Xms mayor que el heap nuevo se baja otra vez" 'grep -q "\"-Xms4096m\"" "$JSON"'
 gs_case "heap de vuelta" "$H"
 
 stage "$H" "$FIXTURE"

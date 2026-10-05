@@ -160,3 +160,8 @@ Por qué: que no se pierdan. Consecuencia: el orden sugerido es #7 → #8 → #9
 - La tabla con usos, valores y costos está en el README y en costs.md, y hay que mantenerla junto con `locals.tiers`.
 - `minimo` (`t3.medium`, burstable) dispara el aviso de CPU burstable a propósito. Es también el tier para la prueba en la cuenta de AWS (D37).
 - Cambiar de tier en un servidor existente: stop → apply → start → provision. El disco solo puede crecer.
+
+**D40. Más heap y un margen que crece con el tier.** El margen fijo de 3 GB dejaba sin asignar ~4,5 GiB en las instancias de 16 GiB. Por pedido del mantenedor, el margen pasa a 1 GB en `minimo`, 1,5 en `estandar`, 2 en `robusto` y 2,5 en `grande` (con 4 vCPU, más hilos). El heap ocupa el resto de la RAM utilizable: 2,5, 5,5, 13 y 12,5 GB. Por qué: con muchos mods el heap es lo que más importa, y la memoria fuera del heap crece con los mods y la CPU, no con la RAM total. Consecuencias:
+- heap + margen queda apenas por debajo de la RAM que informa el kernel (3,5, 7, 15 y 15 GB contra ~3,8, ~7,6 y ~15,5 GiB). Si el juego usa más memoria propia que el margen, Linux puede matar el proceso; la swap de 2 GB amortigua.
+- Se vigila con `pz-ctl.sh metrics` en la prueba de carga y se ajusta con `pz_host_overhead_mb`/`pz_java_xmx_mb`.
+- Que la RAM utilizable de cada tipo alcance se confirma en el primer arranque real (el assert de Ansible lo verifica). La VM (10 GB) verifica `estandar`.
